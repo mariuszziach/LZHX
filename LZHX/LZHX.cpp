@@ -224,7 +224,7 @@ private:
 public:
     bool archiveAddFile(ofstream &arch, string &f) {
         ///////////////////////
-        cout << endl << endl << f << endl;
+        cout << path(f).filename() << endl;
 
         FileHeader fh; memset(&fh, 0, sizeof(FileHeader));
         cdc_strm.stream_size = fh.f_dcm_size = DWord(file_size(f));
@@ -257,15 +257,17 @@ public:
 
         ofstream arch;
         arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
-        
+    
         int b_pos = int(arch.tellp());
 
         DWord f_cnt(0), f_flgs(0);
         writeHeader(arch, f_cnt, f_flgs);
 
         path dir(dir_name);
+
         if (is_directory(dir)) {
             dir = dir.filename();
+            
             for (auto& itm : recursive_directory_iterator(dir)) {
                 string &f = ((string&)((path&)itm).string());
                 if (is_regular_file(f)) {
@@ -277,7 +279,7 @@ public:
                 }
             }
         } else if(is_regular_file(dir)) {
-            string &f = (string&)dir.string();
+            string &f = (string&)dir.filename().string();
             if (!archiveAddFile(arch, f))
                 return false;
             f_cnt = 1;
@@ -293,7 +295,7 @@ public:
     bool archiveExtract(string &arch_name, string &dir) {
         /* TODO: create root dir */
         /* TODO: use dir variable  */
-        //DUMP(dir);
+        DUMPS(dir.c_str());
         DWord f_cnt, f_flags;
         ifstream arch;
 
@@ -308,14 +310,27 @@ public:
             for (int j = 0; j < int(fh.f_nm_cnt); j++) f_name += (char)arch.get();
 
             path p(f_name);
-            create_directories(p.parent_path());
-
-            ///////////////////////
-            cout << p.filename() << endl;
+            if (p.has_parent_path()) {
+                path newp(dir);
+                for (auto it = p.begin(); it != p.end(); it++)
+                    if (it != p.begin()) newp.append(*it);
+                p = newp;
+                create_directories(p.parent_path());
+            } else {
+                path base(f_name), pxt = p.extension();
+                base.replace_extension("");
+                while (exists(p)) {
+                    p = base.concat("0");
+                    p.replace_extension(pxt);
+                }
+            }
 
             ofstream ofile;
-            ofile.open(f_name, ios::binary);
+            ofile.open(p, ios::binary);
             cdc_strm.stream_size = fh.f_cmp_size;
+
+            ////////////////////////////////
+            cout << p.filename() << endl;
 
             decompressFile(arch, ofile);
 
@@ -328,12 +343,11 @@ public:
 
     void createUniqueName(string &name, string *out, bool wext = true) {
         path pn(name), base(name);
-        string zero("0");
         string xt (wext ? ext : "");
         base.replace_extension("");
         pn.replace_extension(xt);
-        while (is_regular_file(pn) || is_directory(pn)) {
-            pn = base.concat(zero);
+        while (exists(pn)) {
+            pn = base.concat("0");
             pn.replace_extension(xt);
         }
         *out = pn.string();
@@ -345,9 +359,9 @@ public:
         if (is_directory(name)) {
             /* compress directory */
             createUniqueName(name, &oname);
-            archiveCreate(name, oname);
-            //cout << "compress directory" << endl;
-            //cout << "out: " << oname << endl;
+            cout << "compress directory - " << oname << endl;
+            assert(archiveCreate(name, oname));
+            
         } else if(is_regular_file(name)) {
             DWord nul;
             ifstream ifile(name, ios::binary);
@@ -355,17 +369,18 @@ public:
             if (readHeader(ifile, &nul, &nul)) {
                 ifile.close();
                 /* decompress archive */
+                
                 createUniqueName(name, &oname, false);
-                archiveExtract(name, oname);
-                //cout << "decompress archive" << endl;
-                //cout << "out: " << oname << endl;
+                cout << "decompress archive - " << oname << endl;
+                assert(archiveExtract(name, oname));
+                
             } else {
                 ifile.close();
                 /* compress one file */
                 createUniqueName(name, &oname);
-                archiveCreate(name, oname);
-                //cout << "compress one file" << endl;
-                //cout << "out: " << oname << endl;
+                cout << "compress one file - " << oname << endl;
+                assert(archiveCreate(name, oname));
+                
             }
             
         } else {
@@ -384,9 +399,9 @@ public:
     bool compressCallback(int in_size, int out_size, int stream_size) {
         clock_t time = clock();
         double sec = double(time - begin) / CLOCKS_PER_SEC;
-        cout << "\r" << (in_size)  / 1024 << " kB ->\t" 
-                     << (out_size) / 1024 << " kB | \t" 
-                     << ((int)((in_size / (float)stream_size) * 100)) << "% | \t"
+        cout << "\r" << (in_size)  / 1024 << " kB -> " 
+                     << (out_size) / 1024 << " kB | " 
+                     << ((int)((in_size / (float)stream_size) * 100)) << "% | "
                      << sec << " sec\t";
         return true;
     }
@@ -401,9 +416,6 @@ public:
         cout << S_INF << endl;
 
         if (argc > 1) {
-
-            //bool do_compress = (string(argv[1]) == string(S_OPT_CMPS));
-
             CodecSettings        sttgs;
             sttgs.Set(16, 16, 2, 8, 16, 3, 3);
             sttgs.byte_lkp_hsh = 5;
@@ -420,11 +432,6 @@ public:
             callback.clockStart();
 
             lzhx.detectInput(string(argv[1]));
-
-            /*if (do_compress)  lzhx.archiveCreate (string(argv[2]), string(argv[3]));
-            else              lzhx.archiveExtract(string(argv[2]), string(argv[3]));*/
-
-            
 
             cout << endl;
         } else { cout << S_INF << endl << S_USAGE << endl; }
