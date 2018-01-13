@@ -37,10 +37,12 @@ using namespace std::experimental::filesystem::v1;
 namespace LZHX {
 
 struct ArchiveHeader {
-    Byte  f_sig[4]; // LZHX
-    DWord f_sig2;   // 0xFFFFFFFB
-    DWord f_cnt;    // num of files
-    DWord f_flgs;   // flags
+    Byte  f_sig[4];   // LZHX
+    DWord f_sig2;     // 0xFFFFFFFB
+    DWord f_cnt;      // num of files
+    DWord f_flgs;     // flags
+    QWord a_unc_size; // archive uncompressed size
+    QWord a_cmp_size; // archive compressed size
 };
 
 struct FileHeader {
@@ -182,16 +184,14 @@ public:
             raw->type = CBT_EMPTY;
 
             if (cdc_cllbck != nullptr && !(cc++ % 5)) 
-                if (!cdc_cllbck->decompressCallback(hf_cdc->getTotalIn(),
-                    lz_cdc->getTotalOut(),
-                    cdc_strm.stream_size)) 
-                        return false;
+                cdc_cllbck->decompressCallback(hf_cdc->getTotalIn(),
+                lz_cdc->getTotalOut(), cdc_strm.stream_size);
         }
 
         if (cdc_cllbck != nullptr)
-            return cdc_cllbck->decompressCallback(hf_cdc->getTotalIn(), lz_cdc->getTotalOut(), cdc_strm.stream_size);
+            cdc_cllbck->decompressCallback(hf_cdc->getTotalIn(), lz_cdc->getTotalOut(), cdc_strm.stream_size);
 
-        return true;
+        return tot_in;
     }
 
 private:
@@ -295,7 +295,6 @@ public:
     bool archiveExtract(string &arch_name, string &dir) {
         /* TODO: create root dir */
         /* TODO: use dir variable  */
-        DUMPS(dir.c_str());
         DWord f_cnt, f_flags;
         ifstream arch;
 
@@ -331,7 +330,6 @@ public:
 
             ////////////////////////////////
             cout << p.filename() << endl;
-
             decompressFile(arch, ofile);
 
             if (ofile.is_open()) ofile.close();
@@ -359,8 +357,8 @@ public:
         if (is_directory(name)) {
             /* compress directory */
             createUniqueName(name, &oname);
-            cout << "compress directory - " << oname << endl;
-            assert(archiveCreate(name, oname));
+            cout << "compress directory" << endl << name << endl << oname << endl;
+            archiveCreate(name, oname);
             
         } else if(is_regular_file(name)) {
             DWord nul;
@@ -371,20 +369,19 @@ public:
                 /* decompress archive */
                 
                 createUniqueName(name, &oname, false);
-                cout << "decompress archive - " << oname << endl;
-                assert(archiveExtract(name, oname));
+                cout << "decompress archive" << endl << name << endl << oname << endl;
+                archiveExtract(name, oname);
                 
             } else {
                 ifile.close();
                 /* compress one file */
                 createUniqueName(name, &oname);
-                cout << "compress one file - " << oname << endl;
-                assert(archiveCreate(name, oname));
+                cout << "compress file" << endl << name << endl << oname << endl;
+                archiveCreate(name, oname);
                 
             }
             
         } else {
-            //cout << "???" << endl;
             return false;
         }
         return false;
@@ -417,7 +414,7 @@ public:
 
         if (argc > 1) {
             CodecSettings        sttgs;
-            sttgs.Set(16, 16, 2, 8, 16, 3, 3);
+            sttgs.Set(16, 16, 2, 8, 16, 3/*<-3*/, 3);
             sttgs.byte_lkp_hsh = 5;
 
             LZHX                 lzhx(&sttgs);
@@ -432,8 +429,6 @@ public:
             callback.clockStart();
 
             lzhx.detectInput(string(argv[1]));
-
-            cout << endl;
         } else { cout << S_INF << endl << S_USAGE << endl; }
         return 0;
     }

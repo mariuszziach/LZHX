@@ -126,7 +126,6 @@ int Huffman::getTotalOut() { return total_out; }
 void Huffman::initStream(CodecStream *codec_stream) {
 	this->codec_stream = codec_stream;
 	this->total_in = this->total_out = 0;
-	//this->stream_size = stream_size;
 }
 int Huffman::compressBlock() {
     CodecBuffer *cb_in, *cb_out;
@@ -139,7 +138,7 @@ int Huffman::compressBlock() {
 	cb_in->type  = CBT_EMPTY;
 	int in_size  = cb_in->size;
 	reset();
-
+    
 	bit_stream->assignBuffer(out);
 	bit_stream->writeBits(in_size, 32);
 	countFrequencies(in, in_size);

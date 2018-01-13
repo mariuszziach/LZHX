@@ -167,7 +167,6 @@ void LZ::initStream(CodecStream *codec_stream) {
     this->codec_stream = codec_stream;
     this->total_in     = 0;
     this->total_out    = 0;
-    //this->stream_size  = stream_size;
 }
 int LZ::compressBlock() {
     CodecBuffer *cb_in, *cb_out[4];
@@ -195,9 +194,11 @@ int LZ::compressBlock() {
         if ((lz_match->len > 3) &&
             (lz_match->len + lz_match->pos + int(cdc_sttgs->byte_lkp_hsh)) < in_size) {
 
+            lz_match->pos = lz_buf->convPos(true, lz_match->pos);
+
             out[0][o[0]++] = (Byte)(1);
             out[2][o[2]++] = (Byte)(lz_match->len);
-            o[1] += write16To8Buf(out[1] + o[1], lz_buf->convPos(true, lz_match->pos));
+            o[1] += write16To8Buf(out[1] + o[1], lz_match->pos);
 
             while (lz_match->len--) {
                 lz_mf->insert(i);
