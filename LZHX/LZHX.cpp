@@ -5,10 +5,12 @@
 /////////////////////////////////////////
 
 // stl
+#include <filesystem>
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <memory>
+#include <vector>
 
 // c
 #include <cassert>
@@ -30,6 +32,7 @@ char const S_OPT_CMPS[] = "-c";
 char const S_ERR_FOPN[] = "file open error";
 
 using namespace std;
+using namespace std::experimental::filesystem::v1;
 
 namespace LZHX {
 
@@ -44,6 +47,7 @@ struct FileHeader {
     // compressed and decompressed sizes
     DWord f_cmp_size;
     DWord f_dcm_size;
+
     // creation, last acces and write times
     QWord f_cr_time;
     QWord f_la_time;
@@ -55,57 +59,23 @@ struct FileHeader {
 
 class LZHX {
 private:
-    char const sig[4] = { 'L','Z','H','X' };
-    //int  const bffrs_cnt = 8;
-
-    ifstream ifile;
-    ofstream ofile;
-
-    //shared_ptr<Byte> wrkng_bffrs[8];
-    //shared_ptr<CodecBuffer[8]> cdc_bffrs;
-
     CodecBuffer *cdc_bffrs;
-    CodecStream cdc_strm;
+    CodecStream  cdc_strm;
     CodecInterface *lz_cdc, *hf_cdc;
     CodecCallbackInterface *cdc_cllbck;
-
     CodecSettings *sttgs;
-
-    inline int outBlkSize(int inBlkSize) {
-        return inBlkSize * 2;
-    }
-
-    bool init(char const *ifname, char const *ofname) {
-        ifile.open(ifname, ios::binary);
-        ofile.open(ofname, ios::binary);
-        if (!ifile.is_open() || !ofile.is_open()) throw string(S_ERR_FOPN);
-
+    int outBlkSize(int inBlkSize) { return inBlkSize * 2; }
+    bool init() {
         cdc_strm.buf_count = sttgs->byte_bffr_cnt;
         cdc_strm.buf_stack = cdc_bffrs;
-
         for (int i = 0; i < int(sttgs->byte_bffr_cnt); i++) {
             cdc_bffrs[i].size = 0;
             cdc_bffrs[i].type = CBT_EMPTY;
         }
-
-        cdc_strm.stream_size = 0;
+        //cdc_strm.stream_size = 0;
         return true;
-    }
-    void writeHeader() { ofile.write(sig, sizeof(sig)); }
-    bool readHeader () {
-        char s[sizeof(sig)] = {0,};
-        ifile.read(s, sizeof(sig));
-        for (int i = 0; i < sizeof(sig); i++) {
-            if (s[i] != sig[i]) return false;
-        }
-        return true;
-    }
-    void clean() {
-        if (ifile.is_open()) ifile.close();
-        if (ofile.is_open()) ofile.close();
     }
 public:
-
     LZHX(CodecSettings *sttgs) {
         cdc_bffrs = new CodecBuffer[sttgs->byte_bffr_cnt];
 
@@ -127,7 +97,6 @@ public:
             delete [] cdc_bffrs[i].mem;
         }
         delete[] cdc_bffrs;
-        clean();
     }
 
     void setCodec(CodecInterface *codec) {
@@ -141,17 +110,16 @@ public:
     void setCallback(CodecCallbackInterface  *codec_callback) {
         this->cdc_cllbck = codec_callback; }
 
-    bool compressFile(char const *ifname, char const *ofname) {
-        if (!init(ifname, ofname)) return false;
+    int compressFile(ifstream &ifile, ofstream &ofile) {
+        int tot_out(0);
 
-        cdc_strm.stream_size = getFSize(ifile);
-        writeHeader();
+        if (!init()) return false;
+        //cdc_strm.stream_size = getFSize(ifile);
 
-        hf_cdc->initStream(&cdc_strm);
         lz_cdc->initStream(&cdc_strm);
+        hf_cdc->initStream(&cdc_strm);
 
         int cc = 0;
-
         while(ifile.good())
         {
             CodecBuffer *empty_bf = cdc_strm.find(CBT_EMPTY);
@@ -165,65 +133,43 @@ public:
 
                 hf_cdc->compressBlock();
                 CodecBuffer *hf_bf = cdc_strm.find(CBT_HF);
-                ofile.write((char*)&hf_bf->size, 4);
+                ofile.write((char*)&hf_bf->size, sizeof(int));
                 ofile.write((char*)hf_bf->mem, hf_bf->size);
+                tot_out += sizeof(int) + hf_bf->size;
                 hf_bf->type = CBT_EMPTY;
 
                 lz_bf = cdc_strm.find(CBT_LZ);
             }
 
-            if (cdc_cllbck != nullptr && !(cc++ % 5)) {
-                if (!cdc_cllbck->compressCallback(lz_cdc->getTotalIn(), hf_cdc->getTotalOut(), cdc_strm.stream_size)) {
-                    return false; } }
+            if (cdc_cllbck != nullptr && !(cc++ % 5))
+                cdc_cllbck->compressCallback(lz_cdc->getTotalIn(), hf_cdc->getTotalOut(), cdc_strm.stream_size);
         }
 
         if (cdc_cllbck != nullptr) 
-            return cdc_cllbck->compressCallback(cdc_strm.stream_size, (int)ofile.tellp(), cdc_strm.stream_size);
+            cdc_cllbck->compressCallback(lz_cdc->getTotalIn(), hf_cdc->getTotalOut(), cdc_strm.stream_size);
 
-        clean();
-        return true;
+        return tot_out;
     }
 
-    //
-    // funkcja dekompresuje podany plik do nowego pliku o podanej nazwie
-    //
-    bool decompressFile(const char *in_file_name, const char *out_file_name) {
-        cout << "decompressFIle" << endl;
-        // otwieramy pliki, alokujemy pamięć
-        if (!init(in_file_name, out_file_name))
-            return false;
+    bool decompressFile(ifstream &ifile, ofstream &ofile) {
+        int tot_in(0);
+       
+        if (!init()) return false;
 
-        //assert(statistical_codec != nullptr);
-        //assert(transform_codec != nullptr);
-        //assert(string_codec != nullptr);
-
-        // wielkość skompresowanego pliku
-        cdc_strm.stream_size = getFSize(ifile);
-
-        // odczytujemy nagłówek
-        if (!readHeader()) {
-            //assert(false);
-            return false;
-        }
-
-        // inicjujemy kodek
         hf_cdc->initStream(&cdc_strm);
         lz_cdc->initStream(&cdc_strm);
 
         int cc = 0;
-
-        // dla całych danych wejściowych
-        while(ifile.tellg() < cdc_strm.stream_size)
-        {
+        while(tot_in < cdc_strm.stream_size) {
+            
             for (int i = 0; i < 4; i++) {
-
+                
                 CodecBuffer *empty = cdc_strm.find(CBT_EMPTY);
-                //assert(empty);
 
-                ifile.read((char*)&empty->size, 4);
+                ifile.read((char*)&empty->size, sizeof(int));
                 ifile.read((char*)empty->mem, empty->size);
 
-                //empty->type = cbt_str;
+                tot_in += sizeof(int) + empty->size;
 
                 empty->type = CBT_HF;
                 hf_cdc->decompressBlock();
@@ -235,23 +181,198 @@ public:
             ofile.write((char*)raw->mem, raw->size);
             raw->type = CBT_EMPTY;
 
-            if (cdc_cllbck != nullptr && !(cc++ % 5)) {
+            if (cdc_cllbck != nullptr && !(cc++ % 5)) 
                 if (!cdc_cllbck->decompressCallback(hf_cdc->getTotalIn(),
                     lz_cdc->getTotalOut(),
-                    cdc_strm.stream_size)) {
-                    return 0;
-                }
-            }
+                    cdc_strm.stream_size)) 
+                        return false;
         }
 
-        // informujemy funkcje monitorującą o końcu dekompresji
-        if (cdc_cllbck != nullptr) {
-            return cdc_cllbck->decompressCallback(cdc_strm.stream_size, (int)ofile.tellp(), cdc_strm.stream_size);
-        }
-
-        clean();
+        if (cdc_cllbck != nullptr)
+            return cdc_cllbck->decompressCallback(hf_cdc->getTotalIn(), lz_cdc->getTotalOut(), cdc_strm.stream_size);
 
         return true;
+    }
+
+private:
+    Byte  const sig[4] = { 'L','Z','H','X' };
+    char  const ext[5] = "lzhx";
+    DWord const sig2   = 0xFFFFFFFB;
+
+    void writeHeader(ofstream &ofile, DWord f_cnt, DWord f_flgs) {
+        ArchiveHeader ah;
+        ah.f_cnt = f_cnt; ah.f_flgs = f_flgs; ah.f_sig2 = sig2;
+        memcpy(ah.f_sig, sig, sizeof(sig));
+        ofile.write((char*)&ah, sizeof(ah));
+    }
+
+    bool readHeader(ifstream &ifile, DWord *f_cnt, DWord *f_flgs) {
+        ArchiveHeader ah;
+        ifile.read((char*)&ah, sizeof(ah));
+        if (ifile.gcount() !=  sizeof(ah)) return false;
+        if (memcmp(ah.f_sig, sig, sizeof(sig)) == 0 && ah.f_sig2 == sig2) {
+            *f_cnt  = ah.f_cnt;
+            *f_flgs = ah.f_flgs;
+            return true;
+        }
+        else {
+            *f_cnt = *f_flgs = 0;
+            return false;
+        }
+    }
+
+public:
+    bool archiveAddFile(ofstream &arch, string &f) {
+        ///////////////////////
+        cout << endl << endl << f << endl;
+
+        FileHeader fh; memset(&fh, 0, sizeof(FileHeader));
+        cdc_strm.stream_size = fh.f_dcm_size = DWord(file_size(f));
+        fh.f_nm_cnt = f.length();
+
+        int h_pos = int(arch.tellp());
+
+        /* TODO: more file information */
+
+        arch.write((char*)&fh, sizeof(FileHeader));
+        arch.write((char*)f.c_str(), fh.f_nm_cnt);
+
+        ifstream ifile;
+        ifile.open(f, ios::binary); if (!ifile.is_open()) return false;
+        fh.f_cmp_size = compressFile(ifile, arch);
+
+        int e_pos = int(arch.tellp());
+        arch.seekp(h_pos);
+        arch.write((char*)&fh, sizeof(FileHeader));
+
+        arch.seekp(e_pos);
+
+        if (ifile.is_open()) ifile.close();
+        return true;
+    }
+
+    bool archiveCreate(string &dir_name, string &arch_name) {
+        /* TODO: prevent overwrite archive file name */
+        /* TODO: add empty folders */
+
+        ofstream arch;
+        arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
+        
+        int b_pos = int(arch.tellp());
+
+        DWord f_cnt(0), f_flgs(0);
+        writeHeader(arch, f_cnt, f_flgs);
+
+        path dir(dir_name);
+        if (is_directory(dir)) {
+            dir = dir.filename();
+            for (auto& itm : recursive_directory_iterator(dir)) {
+                string &f = ((string&)((path&)itm).string());
+                if (is_regular_file(f)) {
+
+                    if (!archiveAddFile(arch, f))
+                        return false;
+
+                    f_cnt++;
+                }
+            }
+        } else if(is_regular_file(dir)) {
+            string &f = (string&)dir.string();
+            if (!archiveAddFile(arch, f))
+                return false;
+            f_cnt = 1;
+        } else { return false; }
+
+        arch.seekp(b_pos);
+        writeHeader(arch, f_cnt, f_flgs);
+
+        if (arch.is_open()) arch.close();
+        return true;
+    }
+
+    bool archiveExtract(string &arch_name, string &dir) {
+        /* TODO: create root dir */
+        /* TODO: use dir variable  */
+        //DUMP(dir);
+        DWord f_cnt, f_flags;
+        ifstream arch;
+
+        arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
+        if (!readHeader(arch, &f_cnt, &f_flags)) return false;
+
+        for (int i = 0; i < int(f_cnt); i++) {
+            FileHeader fh;
+            string f_name;
+            arch.read((char*)&fh, sizeof(FileHeader));
+
+            for (int j = 0; j < int(fh.f_nm_cnt); j++) f_name += (char)arch.get();
+
+            path p(f_name);
+            create_directories(p.parent_path());
+
+            ///////////////////////
+            cout << p.filename() << endl;
+
+            ofstream ofile;
+            ofile.open(f_name, ios::binary);
+            cdc_strm.stream_size = fh.f_cmp_size;
+
+            decompressFile(arch, ofile);
+
+            if (ofile.is_open()) ofile.close();
+        }
+
+        if (arch.is_open()) arch.close();
+        return true;
+    }
+
+    void createUniqueName(string &name, string *out, bool wext = true) {
+        path pn(name), base(name);
+        string zero("0");
+        string xt (wext ? ext : "");
+        base.replace_extension("");
+        pn.replace_extension(xt);
+        while (is_regular_file(pn) || is_directory(pn)) {
+            pn = base.concat(zero);
+            pn.replace_extension(xt);
+        }
+        *out = pn.string();
+    }
+
+    bool detectInput(string &&name) {
+        string oname;
+
+        if (is_directory(name)) {
+            /* compress directory */
+            createUniqueName(name, &oname);
+            archiveCreate(name, oname);
+            //cout << "compress directory" << endl;
+            //cout << "out: " << oname << endl;
+        } else if(is_regular_file(name)) {
+            DWord nul;
+            ifstream ifile(name, ios::binary);
+            if (!ifile.is_open()) return false;
+            if (readHeader(ifile, &nul, &nul)) {
+                ifile.close();
+                /* decompress archive */
+                createUniqueName(name, &oname, false);
+                archiveExtract(name, oname);
+                //cout << "decompress archive" << endl;
+                //cout << "out: " << oname << endl;
+            } else {
+                ifile.close();
+                /* compress one file */
+                createUniqueName(name, &oname);
+                archiveCreate(name, oname);
+                //cout << "compress one file" << endl;
+                //cout << "out: " << oname << endl;
+            }
+            
+        } else {
+            //cout << "???" << endl;
+            return false;
+        }
+        return false;
     }
 };
 
@@ -260,18 +381,15 @@ private:
     clock_t begin;
 public:
     void clockStart() { begin = clock(); }
-
     bool compressCallback(int in_size, int out_size, int stream_size) {
         clock_t time = clock();
         double sec = double(time - begin) / CLOCKS_PER_SEC;
-
         cout << "\r" << (in_size)  / 1024 << " kB ->\t" 
                      << (out_size) / 1024 << " kB | \t" 
                      << ((int)((in_size / (float)stream_size) * 100)) << "% | \t"
                      << sec << " sec\t";
         return true;
     }
-
     bool decompressCallback(int in_size, int out_size, int stream_size) {
         return compressCallback(in_size, out_size, stream_size); }
 };
@@ -279,11 +397,16 @@ public:
 class ConsoleApplication {
 public:
     int run(int argc, char const *argv[]) {
-        if (argc >= 4) {
-            bool do_compress = (string(argv[1]) == string(S_OPT_CMPS));
+
+        cout << S_INF << endl;
+
+        if (argc > 1) {
+
+            //bool do_compress = (string(argv[1]) == string(S_OPT_CMPS));
 
             CodecSettings        sttgs;
-            sttgs.Set(16, 16, 2, 8, 16, 3);
+            sttgs.Set(16, 16, 2, 8, 16, 3, 3);
+            sttgs.byte_lkp_hsh = 5;
 
             LZHX                 lzhx(&sttgs);
             LZ                   lz(&sttgs);
@@ -294,23 +417,23 @@ public:
             lzhx.setCodec(&lz);
             lzhx.setCallback(&callback);
 
-            cout << S_INF << endl;
-
             callback.clockStart();
 
-            if (do_compress)  lzhx.compressFile  (argv[2], argv[3]);
-            else              lzhx.decompressFile(argv[2], argv[3]);
+            lzhx.detectInput(string(argv[1]));
+
+            /*if (do_compress)  lzhx.archiveCreate (string(argv[2]), string(argv[3]));
+            else              lzhx.archiveExtract(string(argv[2]), string(argv[3]));*/
+
+            
+
             cout << endl;
-
-        } else  { cout << S_INF << endl << S_USAGE << endl; } 
-
+        } else { cout << S_INF << endl << S_USAGE << endl; }
         return 0;
     }
 };
-} 
+}
 
-int main(int argc, char const *argv[])
-{
+int main(int argc, char const *argv[]) {
     LZHX::ConsoleApplication app;
     try { return app.run(argc, argv);
     } catch (string &msg)  { cout << msg << endl;

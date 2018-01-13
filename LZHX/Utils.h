@@ -10,7 +10,8 @@
 #include <fstream>
 #include "Types.h"
 
-#define DUMP(varname) fprintf(stderr, "%s\t= %i\n", #varname, varname);
+#define DUMP(varname) fprintf(stderr,  "%s\t= %i\n", #varname, varname);
+#define DUMPS(varname) fprintf(stderr, "%s\t= %s\n", #varname, varname);
 
 namespace LZHX {
 

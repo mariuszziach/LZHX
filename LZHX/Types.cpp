@@ -20,7 +20,8 @@ CodecBuffer *CodecStream::find(CodecBufferType type) {
 // convert bit values to byte values and masks
 void CodecSettings::Set(DWord bit_blk_cap, DWord bit_lkp_cap,
     DWord bit_lkp_hsh, DWord bit_mtch_len,
-    DWord bit_mtch_pos, DWord bit_bffr_cnt) {
+    DWord bit_mtch_pos, DWord bit_bffr_cnt, 
+    DWord bit_runs) {
     this->bit_blk_cap = bit_blk_cap;
     byte_blk_cap = 1 << bit_blk_cap;
     mask_blk_cap = byte_blk_cap - 1;
@@ -35,7 +36,7 @@ void CodecSettings::Set(DWord bit_blk_cap, DWord bit_lkp_cap,
 
     this->bit_mtch_len = bit_mtch_len;
     byte_mtch_len = 1 << bit_mtch_len;
-    mask_mtch_len = byte_mtch_len;
+    mask_mtch_len = byte_mtch_len - 1;
 
     this->bit_mtch_pos = bit_mtch_pos;
     byte_mtch_pos = 1 << bit_mtch_pos;
@@ -44,4 +45,9 @@ void CodecSettings::Set(DWord bit_blk_cap, DWord bit_lkp_cap,
     this->bit_bffr_cnt = bit_bffr_cnt;
     byte_bffr_cnt = 1 << bit_bffr_cnt;
     mask_bffr_cnt = byte_bffr_cnt - 1;
+
+    this->bit_runs = bit_runs;
+    byte_runs = 1 << bit_runs;
+    mask_runs = byte_runs - 1;
+
 }

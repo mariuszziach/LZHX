@@ -53,17 +53,21 @@ class CodecSettings {
 public:
     void Set(DWord bit_blk_cap, DWord bit_lkp_cap,
         DWord bit_lkp_hsh, DWord bit_mtch_len,
-        DWord bit_mtch_pos, DWord bit_bffr_cnt);
+        DWord bit_mtch_pos, DWord bit_bffr_cnt,
+        DWord bit_runs);
     DWord bit_blk_cap;  // file chunk size in BITS
     DWord bit_lkp_cap;  // lookup table size in BITS
     DWord bit_lkp_hsh;  // number of bytes to count hash for lookup table in BITS
     DWord bit_mtch_len; // max match lenght size in BITS
     DWord bit_mtch_pos; // max match position size in BITS
     DWord bit_bffr_cnt; // working buffer count
+    DWord bit_runs;
     DWord byte_blk_cap, byte_lkp_cap, byte_lkp_hsh,
-        byte_mtch_len, byte_mtch_pos, byte_bffr_cnt;
+        byte_mtch_len, byte_mtch_pos, byte_bffr_cnt,
+        byte_runs;
     DWord mask_blk_cap, mask_lkp_cap, mask_lkp_hsh,
-        mask_mtch_len, mask_mtch_pos, mask_bffr_cnt;
+        mask_mtch_len, mask_mtch_pos, mask_bffr_cnt,
+        mask_runs;
 };
 
 } // namespace

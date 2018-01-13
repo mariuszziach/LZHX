@@ -11,18 +11,10 @@
 
 namespace LZHX {
 
-//
-// klasa obsługuje zapis i odczyt bitów do/z bufora
-//
 class BitStream {
 private:
-    // bufor
     Byte *buf;
-
-    // pozycja bitowa/bajtowa
-	int bit_pos;
-	int byte_pos;
-
+	int bit_pos, byte_pos;
 public:
 	BitStream();
 	void assignBuffer(Byte *buf);
@@ -35,7 +27,6 @@ public:
 	void writeBits(int bits, int count);
 	int readBit();
 	int readBits(int count);
-
 };
 
 } // namespace
