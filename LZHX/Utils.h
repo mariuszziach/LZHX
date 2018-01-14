@@ -28,6 +28,11 @@ void setConsoleTitle(char const *tit);
 void consoleWait();
 DWord getFileAttributes(char const *f_name);
 bool  setFileAttributes(char const *f_name, DWord attr);
+void getFileTime(char const *f_name, QWord *fcr, QWord *fla, QWord *lwr);
+void  setFileTime(char const *f_name, QWord fcr, QWord fla, QWord lwr);
+
+
+
 } // namespace
 
 #endif // LZHX_UTILS_H

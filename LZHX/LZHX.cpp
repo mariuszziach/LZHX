@@ -27,7 +27,7 @@
 
 // strings
 char const S_TITLE[]    = "LZHX File Archiver";
-char const S_INF1[]     = "\n LZHX File Archiver\n";
+char const S_INF1[]     = "\n LZHX\n";
 char const S_INF2[]     = " Info       : File archiver based on Lempel-Ziv and Huffman algorithms\n"
                           " Author     : mariusz.ziach@gmail.com\n"
                           " Date       : 2018\n"
@@ -71,8 +71,8 @@ struct FileHeader {
 
 class LZHX {
 private:
-    int total_input;
-    int total_output;
+    QWord total_input;
+    QWord total_output;
     string curr_f_name;
     CodecBuffer *cdc_bffrs;
     CodecStream  cdc_strm;
@@ -126,6 +126,24 @@ public:
 
     void setCallback(CodecCallbackInterface  *codec_callback) {
         this->cdc_cllbck = codec_callback; }
+
+private:
+    DWord f_hash;
+
+    void updateHash(char *buf, int size) {
+
+    }
+
+public:
+    void initHash() {  f_hash = 0; }
+
+    void readAndHash(ifstream &ifile, char *buf, int size) {
+        updateHash(buf, size); ifile.read(buf, size); }
+
+    void writeAndHash(ofstream &ofile, char *buf, int size) {
+        updateHash (buf, size); ofile.write(buf, size);  }
+
+    void finishHash() {  f_hash = 0; }
 
     int compressFile(ifstream &ifile, ofstream &ofile) {
         int tot_in(0), tot_out(0);
@@ -218,22 +236,30 @@ private:
     Byte  const sig[4] = { 'L','Z','H','X' };
     char  const ext[5] = "lzhx";
     DWord const sig2   = 0xFFFFFFFB;
-    void writeHeader(ofstream &ofile, DWord f_cnt, DWord f_flgs) {
+    void writeHeader(ofstream &ofile, DWord f_cnt, DWord f_flgs,
+        QWord a_unc_size, QWord a_cmp_size) {
+
         ArchiveHeader ah;
         ah.f_cnt = f_cnt; ah.f_flgs = f_flgs; ah.f_sig2 = sig2;
+        ah.a_cmp_size = a_cmp_size; ah.a_unc_size = a_unc_size;
         memcpy(ah.f_sig, sig, sizeof(sig));
         ofile.write((char*)&ah, sizeof(ah));
     }
-    bool readHeader(ifstream &ifile, DWord *f_cnt, DWord *f_flgs) {
+    bool readHeader(ifstream &ifile, DWord *f_cnt, DWord *f_flgs,
+        QWord *a_unc_size, QWord *a_cmp_size) {
+
         ArchiveHeader ah;
         ifile.read((char*)&ah, sizeof(ah));
         if (ifile.gcount() !=  sizeof(ah)) return false;
         if (memcmp(ah.f_sig, sig, sizeof(sig)) == 0 && ah.f_sig2 == sig2) {
             *f_cnt  = ah.f_cnt;
             *f_flgs = ah.f_flgs;
+            *a_unc_size = ah.a_unc_size;
+            *a_cmp_size = ah.a_cmp_size;
             return true;
         } else {
             *f_cnt = *f_flgs = 0;
+            *a_unc_size = *a_cmp_size = 0;
             return false;
         }
     }
@@ -246,6 +272,8 @@ public:
 
         /* TODO: more file information */
         fh.f_attr = getFileAttributes(f.c_str());
+        getFileTime(f.c_str(), &fh.f_cr_time, &fh.f_la_time, &fh.f_lw_time);
+
         int h_pos = int(arch.tellp());
 
         arch.write((char*)&fh, sizeof(FileHeader));
@@ -279,7 +307,7 @@ public:
         int b_pos = int(arch.tellp());
 
         DWord f_cnt(0), f_flgs(0);
-        writeHeader(arch, f_cnt, f_flgs);
+        writeHeader(arch, f_cnt, f_flgs, 0, 0);
 
         path dir(dir_name);
 
@@ -303,7 +331,8 @@ public:
         } else { return false; }
 
         arch.seekp(b_pos);
-        writeHeader(arch, f_cnt, f_flgs);
+ 
+        writeHeader(arch, f_cnt, f_flgs, total_input, total_output);
 
         if (arch.is_open()) arch.close();
         return true;
@@ -312,11 +341,12 @@ public:
     bool archiveExtract(string &arch_name, string &dir) {
         setConsoleTextNormal();
 
+        QWord a_unc_size(0), a_cmp_size(0);
         DWord f_cnt, f_flags;
         ifstream arch;
 
         arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
-        if (!readHeader(arch, &f_cnt, &f_flags)) return false;
+        if (!readHeader(arch, &f_cnt, &f_flags, &a_unc_size, &a_cmp_size)) return false;
 
         for (int i = 0; i < int(f_cnt); i++) {
 
@@ -355,7 +385,7 @@ public:
 
             /* TODO: file info */
             setFileAttributes((char const *)(p.string().c_str()), fh.f_attr);
-
+            setFileTime((char const *)(p.string().c_str()), fh.f_cr_time, fh.f_la_time, fh.f_lw_time);
         }
 
         if (arch.is_open()) arch.close();
@@ -387,10 +417,10 @@ public:
                  << path(oname).filename() << endl << endl;
             archiveCreate(name, oname);
         } else if(is_regular_file(name)) {
-            DWord nul;
+            QWord nul;
             ifstream ifile(name, ios::binary);
             if (!ifile.is_open()) return false;
-            if (readHeader(ifile, &nul, &nul)) {
+            if (readHeader(ifile, (DWord*)&nul, (DWord*)&nul, &nul, &nul)) {
                 ifile.close();
                 act_cmp = false;
                 createUniqueName(name, &oname, false);
