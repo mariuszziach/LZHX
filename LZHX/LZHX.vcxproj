@@ -132,8 +132,16 @@
     <ClInclude Include="BitStream.h" />
     <ClInclude Include="Huffman.h" />
     <ClInclude Include="LZ.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="Types.h" />
     <ClInclude Include="Utils.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="resource.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="fileicon.ico" />
+    <Image Include="icon.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -400,7 +400,7 @@ public:
         clock_t begin = clock();
 
         SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
-             FOREGROUND_GREEN);
+            FOREGROUND_RED);
 
         if (is_directory(name)) {
             /*compress directory */
@@ -437,7 +437,7 @@ public:
         }
 
         SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
-            FOREGROUND_GREEN);
+            FOREGROUND_RED);
 
         clock_t time = clock();
         double sec = double(time - begin) / CLOCKS_PER_SEC;
@@ -489,7 +489,7 @@ public:
         SetConsoleTitle(S_TITLE);
 
         SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
-            FOREGROUND_GREEN);
+            FOREGROUND_RED);
         cout << S_INF1 << endl;
 
         SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
@@ -514,7 +514,7 @@ public:
             lzhx.detectInput(string(argv[1]));
         } else {
             SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
-                FOREGROUND_GREEN);
+                FOREGROUND_RED);
             cout << S_USAGE1 << endl;
 
             SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
