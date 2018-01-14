@@ -25,10 +25,18 @@
 #include "Huffman.h"
 #include "LZ.h"
 
+// namespaces
+using namespace std;
+using namespace std::experimental::filesystem::v1;
+
+namespace LZHX {
+
 // strings
 char const S_TITLE[]    = "LZHX File Archiver";
-char const S_INF1[]     = "\n LZHX\n";
-char const S_INF2[]     = " Info       : File archiver based on Lempel-Ziv and Huffman algorithms\n"
+char const S_INF1 []    = "\n LZHX\n";
+char const S_INF2 []    = " Info       : File archiver based on Lempel-Ziv and Huffman algorithms.\n"
+                          "              To check the integrity  of  files, the program uses a FNV\n"
+                          "              hashing algorithm and for encryption simple  XOR  cipher.\n"
                           " Author     : mariusz.ziach@gmail.com\n"
                           " Date       : 2018\n"
                           " Version    : 1.0\n";
@@ -36,15 +44,20 @@ char const S_USAGE1[]   = " Usage: LZHX.exe <file/folder/archive to compress/dec
 char const S_USAGE2[]   = "  The program will automatically recognize whether the given parameter\n"
                           "  is an archive  for  decompression or a file/folder  for  compression.\n"
                           "  It  will also prevent overwriting files by creating unique names for\n"
-                          "  output files if needed.\n ";
-char const S_ERR_FOPN[] = " File Error\n";
-char const S_ERR_EX[]   = " Exception\n";
-char const S_ERR_UNEX[] = " Unknown Exception\n";
+                          "  outputed files and folders if needed.\n ";
+char const S_ERR_FOPN[] = " File error.\n";
+char const S_ERR_EX  [] = " Exception: ";
+char const S_ERR_UNEX[] = " Unknown exception.\n";
+char const S_ERR_HASH[] = " Error - different file hashes.\n";
+char const S_ERR_WPAS[] = " Wrong password.\n";
+char const S_PASS1 []   = " Type password if you want to encrypt this archive or just press enter:";
+char const S_PASS2 []   = " Archive is encrypted. Type password:";
+char const S_COMP  []   = " Compress   : ";
+char const S_DECOMP[]   = " Decompress : ";
 
-using namespace std;
-using namespace std::experimental::filesystem::v1;
-
-namespace LZHX {
+Byte  const sig[4] = { 'L','Z','H','X' };
+char  const ext[5] = "lzhx";
+DWord const sig2   = 0xFFFFFFFB;
 
 enum AH_FLAGS { AF_ENCRYPT = 0x1 };
 
@@ -89,7 +102,6 @@ private:
             cdc_bffrs[i].size = 0;
             cdc_bffrs[i].type = CBT_EMPTY;
         }
-        //cdc_strm.stream_size = 0;
         return true;
     }
 public:
@@ -117,7 +129,6 @@ public:
         }
         delete[] cdc_bffrs;
     }
-
     void setCodec(CodecInterface *codec) {
         if (codec == nullptr) return;
         switch (codec->getCodecType()) {
@@ -125,7 +136,6 @@ public:
             case CT_HF: hf_cdc = codec; break;
         }
     }
-
     void setCallback(CodecCallbackInterface  *codec_callback) {
         this->cdc_cllbck = codec_callback; }
 
@@ -146,6 +156,73 @@ public:
     void writeAndHash(ofstream &ofile, char *buf, int size) {
         updateHash (buf, size); ofile.write(buf, size);  }
 
+private:
+    bool do_encrypt, enc_hash;
+    string ekey;
+    int key_pos, key_size;
+    
+    DWord encrypted_hash;
+
+    Byte encryptByte(Byte b) {
+        return b ^ ekey[key_pos++ % key_size];
+    }
+    Byte decryptByte(Byte b) {
+        return b ^ ekey[key_pos++ % key_size];
+    }
+public:
+    void initEncryption(bool do_encrypt) {
+        this->do_encrypt = do_encrypt;
+        this->key_pos    = 0;
+        this->key_size   = ekey.length();
+        if (do_encrypt) {
+            DWord hash = 0x811C9DC5; int i;
+            for (i = 0; i < this->key_size; i++) {
+                hash ^= ekey[i];
+                hash *= 0x1000193;
+            }
+            i = 0;
+            encrypted_hash |= ekey[i++ % this->key_size];
+            encrypted_hash |= ekey[i++ % this->key_size] << 8;
+            encrypted_hash |= ekey[i++ % this->key_size] << 16;
+            encrypted_hash |= ekey[i++ % this->key_size] << 24;
+            encrypted_hash = encrypted_hash ^ hash;
+            enc_hash = false;
+        }
+        else {
+            enc_hash = true;
+        }
+    }
+    void readAndDecrypt(ifstream &ifile, char *buf, int size) {
+        if (!enc_hash) {
+            DWord ehc(0);
+            /* read and check enc_hash */
+            ifile.read((char*)&ehc, sizeof(DWord));
+            if (ehc != encrypted_hash) {
+                throw string(S_ERR_WPAS);
+            }
+            else {
+                enc_hash = true;
+            }
+        }
+        ifile.read(buf, size);
+        if (do_encrypt) {
+            for (int i = 0; i < ifile.gcount(); i++)
+                buf[i] = decryptByte(buf[i]);
+        }
+    }
+    void encryptAndWrite(ofstream &ofile, char *buf, int size) {
+        if (!enc_hash) {
+            /* write enc_hash */
+            ofile.write((char*)&encrypted_hash, sizeof(DWord));
+            enc_hash = true;
+        }
+        if (do_encrypt) {
+            for (int i = 0; i < size; i++)
+                buf[i] = encryptByte(buf[i]);
+        }
+        ofile.write(buf, size);
+    }
+public:
     int compressFile(ifstream &ifile, ofstream &ofile) {
         int tot_in(0), tot_out(0);
 
@@ -166,11 +243,13 @@ public:
 
             CodecBuffer *lz_bf = cdc_strm.find(CBT_LZ);
             while (lz_bf) {
-
                 hf_cdc->compressBlock();
                 CodecBuffer *hf_bf = cdc_strm.find(CBT_HF);
-                ofile.write((char*)&hf_bf->size, sizeof(int));
-                ofile.write((char*)hf_bf->mem, hf_bf->size);
+                int temp_s = hf_bf->size;
+
+                encryptAndWrite(ofile, (char*)&temp_s, sizeof(int));
+                encryptAndWrite(ofile, (char*)hf_bf->mem, hf_bf->size);
+
                 tot_out += sizeof(int) + hf_bf->size;
                 hf_bf->type = CBT_EMPTY;
                 lz_bf = cdc_strm.find(CBT_LZ);
@@ -193,19 +272,19 @@ public:
 
     int decompressFile(ifstream &ifile, ofstream &ofile) {
         int tot_in(0), tot_out(0);
-       
+
         if (!init()) return false;
 
         hf_cdc->initStream(&cdc_strm);
         lz_cdc->initStream(&cdc_strm);
 
         int cc = 0;
-        while(tot_in < cdc_strm.stream_size) {
-            
+        while (tot_in < cdc_strm.stream_size) {
+
             for (int i = 0; i < 4; i++) {
                 CodecBuffer *empty = cdc_strm.find(CBT_EMPTY);
-                ifile.read((char*)&empty->size, sizeof(int));
-                ifile.read((char*)empty->mem, empty->size);
+                readAndDecrypt(ifile, (char*)&empty->size, sizeof(int));
+                readAndDecrypt(ifile, (char*)empty->mem, empty->size);
                 tot_in += sizeof(int) + empty->size;
                 empty->type = CBT_HF;
                 hf_cdc->decompressBlock();
@@ -234,9 +313,6 @@ public:
     }
 
 private:
-    Byte  const sig[4] = { 'L','Z','H','X' };
-    char  const ext[5] = "lzhx";
-    DWord const sig2   = 0xFFFFFFFB;
     void writeHeader(ofstream &ofile, DWord f_cnt, DWord f_flgs,
         QWord a_unc_size, QWord a_cmp_size) {
 
@@ -301,17 +377,16 @@ public:
 
             if (ifile.is_open()) ifile.close();
         }
-        /*else {
-            DUMP(f);
-        }*/
-
         return true;
     }
 
     bool archiveCreate(string &dir_name, string &arch_name) {
-        /* TODO: add empty folders */
-
         setConsoleTextNormal();
+
+        cout << S_PASS1 << endl << endl << " ";
+        getline(cin, ekey, '\n');
+        cout << endl;
+        initEncryption(!ekey.empty());
 
         ofstream arch;
         arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
@@ -319,6 +394,7 @@ public:
         int b_pos = int(arch.tellp());
 
         DWord f_cnt(0), f_flgs(0);
+        if (do_encrypt) f_flgs |= AF_ENCRYPT;
         writeHeader(arch, f_cnt, f_flgs, 0, 0);
 
         path dir(dir_name);
@@ -365,6 +441,14 @@ public:
         arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
         if (!readHeader(arch, &f_cnt, &f_flags, &a_unc_size, &a_cmp_size)) return false;
 
+        if (f_flags & AF_ENCRYPT) {
+            cout << S_PASS2 << endl << endl << " ";
+            getline(cin, ekey, '\n');
+            cout << endl;
+        }
+
+        initEncryption(!ekey.empty());
+
         for (int i = 0; i < int(f_cnt); i++) {
 
             FileHeader fh;
@@ -398,10 +482,17 @@ public:
 
                 cdc_cllbck->init(); initHash();
                 curr_f_name = p.filename().string();
-                decompressFile(arch, ofile);
+
+                try {
+                    decompressFile(arch, ofile);
+                } catch (string &s) {
+                    if (ofile.is_open()) ofile.close();
+                    remove(p);
+                    throw s;
+                }
 
                 if (f_hash != fh.f_cnt_hsh) 
-                    cout << endl << "Error - different FNV hashes" << endl;
+                    cout << endl << S_ERR_HASH << endl;
 
                 cout << endl;
                 if (ofile.is_open()) ofile.close();
@@ -437,7 +528,7 @@ public:
 
         if (is_directory(name)) {
             createUniqueName(name, &oname);
-            cout << " Compress   : " << path(name).filename() << " -> "
+            cout << S_COMP << path(name).filename() << " -> "
                  << path(oname).filename() << endl << endl;
             archiveCreate(name, oname);
         } else if(is_regular_file(name)) {
@@ -448,13 +539,13 @@ public:
                 ifile.close();
                 act_cmp = false;
                 createUniqueName(name, &oname, false);
-                cout << " Decompress : " << path(name).filename() << " -> "
+                cout << S_DECOMP << path(name).filename() << " -> "
                      << path(oname).filename() << endl << endl;
                 archiveExtract(name, oname);
             } else {
                 ifile.close();
                 createUniqueName(name, &oname);
-                cout << " Compress   : " << path(name).filename() << " -> "
+                cout << S_COMP << path(name).filename() << " -> "
                      << path(oname).filename() << endl << endl;
                 archiveCreate(name, oname);
             }
@@ -505,7 +596,7 @@ public:
              << setw(5) << pr  << "% | "
              << setw(9) << sec << "s | "
              << setw(9) << (in_size)   / 1024 << "kB -> "
-             << setw(9) << (out_size) / 1024 << "kB | "
+             << setw(9) << (out_size)  / 1024 << "kB | "
              << fn;
         return true;
     }
@@ -521,7 +612,6 @@ public:
         cout << S_INF1 << endl;
         setConsoleTextNormal();
         cout << S_INF2 << endl;
-
         if (argc > 1) {
             CodecSettings        sttgs;
             sttgs.Set(16, 16, 2, 8, 16, 3, 3);
@@ -548,11 +638,12 @@ public:
 }
 
 int main(int argc, char const *argv[]) {
+    
     LZHX::ConsoleApplication app;
     try { return app.run(argc, argv);
     } catch (string &msg)  { cout << msg << endl;
-    } catch (exception &e) { cout << S_ERR_EX   << e.what() << endl;
-    } catch (...) {          cout << S_ERR_UNEX << endl; }
+    } catch (exception &e) { cout << LZHX::S_ERR_EX   << e.what() << endl;
+    } catch (...) {          cout << LZHX::S_ERR_UNEX << endl; }
     LZHX::consoleWait();
     return 1;
 }

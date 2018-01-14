@@ -15,6 +15,8 @@
 
 namespace LZHX {
 
+extern char const ext[5];
+
 int   getFSize (std::ifstream &ifs);
 int   write32To8Buf (Byte *buf, DWord i);
 int   write16To8Buf (Byte *buf, Word  i);
@@ -27,10 +29,10 @@ void setConsoleTextNormal();
 void setConsoleTitle(char const *tit);
 void consoleWait();
 DWord getFileAttributes(char const *f_name);
-bool setFileAttributes(char const *f_name, DWord attr);
+bool setFileAttributes (char const *f_name, DWord attr);
 void getFileTime(char const *f_name, QWord *fcr, QWord *fla, QWord *lwr, bool dir = false);
-void setFileTime(char const *f_name, QWord fcr, QWord fla, QWord lwr, bool dir = false);
-
+void setFileTime(char const *f_name, QWord  fcr, QWord  fla, QWord  lwr, bool dir = false);
+bool isFileExtAssoc();
 
 
 } // namespace

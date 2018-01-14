@@ -6,6 +6,7 @@
 
 // c
 #include <cassert>
+#include <stdlib.h>
 
 // stl
 #include <fstream>
