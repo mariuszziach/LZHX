@@ -56,17 +56,15 @@ struct ArchiveHeader {
 };
 
 struct FileHeader {
-    // compressed and decompressed sizes
-    DWord f_cmp_size;
+    Byte  f_flags;    // flags
+    DWord f_cmp_size; // compressed and decompressed sizes
     DWord f_dcm_size;
-
-    // creation, last acces and write times
-    QWord f_cr_time;
+    QWord f_cr_time;  // creation, last acces and write times
     QWord f_la_time;
     QWord f_lw_time;
-    DWord f_attr;    // file attributes
-    DWord f_nm_cnt;  // file name count
-    DWord f_cnt_hsh; // file hash sum
+    DWord f_attr;     // file attributes
+    DWord f_nm_cnt;   // file name bytes count
+    DWord f_cnt_hsh;  // FNV hash
 };
 
 class LZHX {
@@ -129,21 +127,20 @@ public:
 
 private:
     DWord f_hash;
-
-    void updateHash(char *buf, int size) {
-
+    void updateHash(char *buf, int size) { 
+        for (int i = 0; i < size; i++) {
+            f_hash ^= buf[i];
+            f_hash *= 0x1000193;
+        }
     }
-
 public:
-    void initHash() {  f_hash = 0; }
-
+    void initHash()   {  f_hash = 0x811C9DC5; }
     void readAndHash(ifstream &ifile, char *buf, int size) {
-        updateHash(buf, size); ifile.read(buf, size); }
-
+         ifile.read(buf, size);
+         updateHash(buf, (int)ifile.gcount());
+    }
     void writeAndHash(ofstream &ofile, char *buf, int size) {
         updateHash (buf, size); ofile.write(buf, size);  }
-
-    void finishHash() {  f_hash = 0; }
 
     int compressFile(ifstream &ifile, ofstream &ofile) {
         int tot_in(0), tot_out(0);
@@ -157,7 +154,7 @@ public:
         while(ifile.good())
         {
             CodecBuffer *empty_bf = cdc_strm.find(CBT_EMPTY);
-            ifile.read((char*)empty_bf->mem, sttgs->byte_blk_cap);
+            readAndHash(ifile, (char*)empty_bf->mem, sttgs->byte_blk_cap);
             empty_bf->size = (int)ifile.gcount(); empty_bf->type = CBT_RAW;
             tot_in += empty_bf->size;
 
@@ -212,7 +209,7 @@ public:
 
             lz_cdc->decompressBlock();
             CodecBuffer *raw = cdc_strm.find(CBT_RAW);
-            ofile.write((char*)raw->mem, raw->size);
+            writeAndHash(ofile, (char*)raw->mem, raw->size);
 
             tot_out += raw->size;
             raw->type = CBT_EMPTY;
@@ -284,9 +281,13 @@ public:
 
         cdc_cllbck->init();
         curr_f_name = path(f).filename().string();
+
+        initHash();
         fh.f_cmp_size = compressFile(ifile, arch);
+        fh.f_cnt_hsh = f_hash;
+
         cout << endl;
- 
+
         int e_pos = int(arch.tellp());
         arch.seekp(h_pos);
         arch.write((char*)&fh, sizeof(FileHeader));
@@ -378,7 +379,12 @@ public:
 
             cdc_cllbck->init();
             curr_f_name = p.filename().string();
+            initHash();
             decompressFile(arch, ofile);
+
+            if (f_hash != fh.f_cnt_hsh) {
+                cout << endl << "Error - different FNV hashes" << endl; }
+
             cout << endl;
 
             if (ofile.is_open()) ofile.close();
