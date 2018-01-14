@@ -36,7 +36,7 @@ char const S_TITLE[]    = "LZHX File Archiver";
 char const S_INF1 []    = "\n LZHX\n";
 char const S_INF2 []    = " Info       : File archiver based on Lempel-Ziv and Huffman algorithms.\n"
                           "              To check the integrity  of  files, the program uses a FNV\n"
-                          "              hashing algorithm and for encryption simple  XOR  cipher.\n"
+                          "              hashing algorithm and for encryption modified XOR cipher.\n\n"
                           " Author     : mariusz.ziach@gmail.com\n"
                           " Date       : 2018\n"
                           " Version    : 1.0\n";
@@ -157,53 +157,50 @@ public:
         updateHash (buf, size); ofile.write(buf, size);  }
 
 private:
-    bool do_encrypt, enc_hash;
+    bool do_encrypt;// , enc_hash;
     string ekey;
     int key_pos, key_size;
     
     DWord encrypted_hash;
 
     Byte encryptByte(Byte b) {
-        return b ^ ekey[key_pos++ % key_size];
+        return b ^ ekey[key_pos++ % key_size] ^ (key_pos * 3);
     }
     Byte decryptByte(Byte b) {
-        return b ^ ekey[key_pos++ % key_size];
+        return b ^ ekey[key_pos++ % key_size] ^ (key_pos * 3);
     }
 public:
-    void initEncryption(bool do_encrypt) {
+    void initEncryption(bool do_encrypt, ifstream *arch, ofstream *arch2) {
         this->do_encrypt = do_encrypt;
         this->key_pos    = 0;
         this->key_size   = ekey.length();
         if (do_encrypt) {
-            DWord hash = 0x811C9DC5; int i;
-            for (i = 0; i < this->key_size; i++) {
-                hash ^= ekey[i];
-                hash *= 0x1000193;
+            DWord hash = 0x811C9DC5;
+            encrypted_hash = 0;
+            if (!ekey.empty()) {
+                int i;
+                for (i = 0; i < this->key_size; i++) {
+                    hash ^= ekey[i];
+                    hash *= 0x1000193;
+                }
+                i = 0;
+                encrypted_hash |= ekey[i++ % this->key_size];
+                encrypted_hash |= ekey[i++ % this->key_size] << 8;
+                encrypted_hash |= ekey[i++ % this->key_size] << 16;
+                encrypted_hash |= ekey[i++ % this->key_size] << 24;
+                encrypted_hash = encrypted_hash ^ hash;
             }
-            i = 0;
-            encrypted_hash |= ekey[i++ % this->key_size];
-            encrypted_hash |= ekey[i++ % this->key_size] << 8;
-            encrypted_hash |= ekey[i++ % this->key_size] << 16;
-            encrypted_hash |= ekey[i++ % this->key_size] << 24;
-            encrypted_hash = encrypted_hash ^ hash;
-            enc_hash = false;
-        }
-        else {
-            enc_hash = true;
+            if (arch != nullptr) {
+                DWord ehc(0);
+                arch->read((char*)&ehc, sizeof(DWord));
+                if (ehc != encrypted_hash) { throw string(S_ERR_WPAS); }
+            }
+            else if (arch2 != nullptr) {
+                arch2->write((char*)&encrypted_hash, sizeof(DWord));
+            }
         }
     }
     void readAndDecrypt(ifstream &ifile, char *buf, int size) {
-        if (!enc_hash) {
-            DWord ehc(0);
-            /* read and check enc_hash */
-            ifile.read((char*)&ehc, sizeof(DWord));
-            if (ehc != encrypted_hash) {
-                throw string(S_ERR_WPAS);
-            }
-            else {
-                enc_hash = true;
-            }
-        }
         ifile.read(buf, size);
         if (do_encrypt) {
             for (int i = 0; i < ifile.gcount(); i++)
@@ -211,11 +208,6 @@ public:
         }
     }
     void encryptAndWrite(ofstream &ofile, char *buf, int size) {
-        if (!enc_hash) {
-            /* write enc_hash */
-            ofile.write((char*)&encrypted_hash, sizeof(DWord));
-            enc_hash = true;
-        }
         if (do_encrypt) {
             for (int i = 0; i < size; i++)
                 buf[i] = encryptByte(buf[i]);
@@ -386,16 +378,17 @@ public:
         cout << S_PASS1 << endl << endl << " ";
         getline(cin, ekey, '\n');
         cout << endl;
-        initEncryption(!ekey.empty());
-
+        
         ofstream arch;
         arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
     
         int b_pos = int(arch.tellp());
 
         DWord f_cnt(0), f_flgs(0);
-        if (do_encrypt) f_flgs |= AF_ENCRYPT;
+        if (!ekey.empty()) f_flgs |= AF_ENCRYPT;
         writeHeader(arch, f_cnt, f_flgs, 0, 0);
+
+        initEncryption(!ekey.empty(), nullptr, &arch);
 
         path dir(dir_name);
 
@@ -447,7 +440,7 @@ public:
             cout << endl;
         }
 
-        initEncryption(!ekey.empty());
+        initEncryption(f_flags & AF_ENCRYPT, &arch, nullptr);
 
         for (int i = 0; i < int(f_cnt); i++) {
 
