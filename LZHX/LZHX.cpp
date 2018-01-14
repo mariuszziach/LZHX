@@ -7,6 +7,7 @@
 // stl
 #include <filesystem>
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <string>
 #include <memory>
@@ -17,6 +18,10 @@
 #include <cstdlib>
 #include <ctime>
 
+// windows
+#include <windows.h>
+#include <conio.h>
+
 // LZHX
 #include "Types.h"
 #include "Utils.h"
@@ -25,11 +30,20 @@
 #include "LZ.h"
 
 // strings
-char const S_INF[] = "Lempel-Ziv-Huffman file compressor\n"\
-"author: mariusz.ziach@gmail.com\n";
-char const S_USAGE[]    = "usage: lzhx.exe -<c | d> <input> <output>\n";
-char const S_OPT_CMPS[] = "-c";
-char const S_ERR_FOPN[] = "file open error";
+char const S_TITLE[]    = "LZHX File Archiver";
+char const S_INF1[]     = "\n LZHX File Archiver\n";
+char const S_INF2[]     = " Info       : File archiver based on Lempel-Ziv and Huffman algorithms\n"
+                          " Author     : mariusz.ziach@gmail.com\n"
+                          " Date       : 2018\n"
+                          " Version    : 1.0\n";
+char const S_USAGE1[]   = " Usage: LZHX.exe <file/folder/archive to compress/decompress>\n";
+char const S_USAGE2[]   = "  The program will automatically recognize whether the given parameter\n"
+                          "  is an archive  for  decompression or a file/folder  for  compression.\n"
+                          "  It  will also prevent overwriting files by creating unique names for\n"
+                          "  output files if needed.\n ";
+char const S_ERR_FOPN[] = " File Error\n";
+char const S_ERR_EX[]   = " Exception\n";
+char const S_ERR_UNEX[] = " Unknown Exception\n";
 
 using namespace std;
 using namespace std::experimental::filesystem::v1;
@@ -61,6 +75,9 @@ struct FileHeader {
 
 class LZHX {
 private:
+    int total_input;
+    int total_output;
+    string curr_f_name;
     CodecBuffer *cdc_bffrs;
     CodecStream  cdc_strm;
     CodecInterface *lz_cdc, *hf_cdc;
@@ -92,6 +109,8 @@ public:
 
         lz_cdc = hf_cdc = nullptr;
         cdc_cllbck      = nullptr;
+        curr_f_name     = "";
+        total_input = total_output = 0;
         
     }
     ~LZHX() {
@@ -113,10 +132,9 @@ public:
         this->cdc_cllbck = codec_callback; }
 
     int compressFile(ifstream &ifile, ofstream &ofile) {
-        int tot_out(0);
+        int tot_in(0), tot_out(0);
 
         if (!init()) return false;
-        //cdc_strm.stream_size = getFSize(ifile);
 
         lz_cdc->initStream(&cdc_strm);
         hf_cdc->initStream(&cdc_strm);
@@ -127,6 +145,7 @@ public:
             CodecBuffer *empty_bf = cdc_strm.find(CBT_EMPTY);
             ifile.read((char*)empty_bf->mem, sttgs->byte_blk_cap);
             empty_bf->size = (int)ifile.gcount(); empty_bf->type = CBT_RAW;
+            tot_in += empty_bf->size;
 
             lz_cdc->compressBlock();
 
@@ -143,18 +162,23 @@ public:
                 lz_bf = cdc_strm.find(CBT_LZ);
             }
 
-            if (cdc_cllbck != nullptr && !(cc++ % 5))
-                cdc_cllbck->compressCallback(lz_cdc->getTotalIn(), hf_cdc->getTotalOut(), cdc_strm.stream_size);
+            if (cdc_cllbck != nullptr && !(cc++ % 12))
+                cdc_cllbck->compressCallback(lz_cdc->getTotalIn(), hf_cdc->getTotalOut(),
+                    cdc_strm.stream_size, curr_f_name.c_str());
         }
 
-        if (cdc_cllbck != nullptr) 
-            cdc_cllbck->compressCallback(lz_cdc->getTotalIn(), hf_cdc->getTotalOut(), cdc_strm.stream_size);
+        if (cdc_cllbck != nullptr)
+            cdc_cllbck->compressCallback(tot_in, tot_out,
+                cdc_strm.stream_size, curr_f_name.c_str());
+
+        total_input  += tot_in;
+        total_output += tot_out;
 
         return tot_out;
     }
 
-    bool decompressFile(ifstream &ifile, ofstream &ofile) {
-        int tot_in(0);
+    int decompressFile(ifstream &ifile, ofstream &ofile) {
+        int tot_in(0), tot_out(0);
        
         if (!init()) return false;
 
@@ -181,15 +205,22 @@ public:
 
             CodecBuffer *raw = cdc_strm.find(CBT_RAW);
             ofile.write((char*)raw->mem, raw->size);
+
+            tot_out += raw->size;
+
             raw->type = CBT_EMPTY;
 
-            if (cdc_cllbck != nullptr && !(cc++ % 5)) 
+            if (cdc_cllbck != nullptr && !(cc++ % 12))
                 cdc_cllbck->decompressCallback(hf_cdc->getTotalIn(),
-                lz_cdc->getTotalOut(), cdc_strm.stream_size);
+                    lz_cdc->getTotalOut(), cdc_strm.stream_size, curr_f_name.c_str());
         }
 
         if (cdc_cllbck != nullptr)
-            cdc_cllbck->decompressCallback(hf_cdc->getTotalIn(), lz_cdc->getTotalOut(), cdc_strm.stream_size);
+            cdc_cllbck->decompressCallback(tot_in, tot_out,
+                cdc_strm.stream_size, curr_f_name.c_str());
+
+        total_input += tot_in;
+        total_output += tot_out;
 
         return tot_in;
     }
@@ -223,9 +254,6 @@ private:
 
 public:
     bool archiveAddFile(ofstream &arch, string &f) {
-        ///////////////////////
-        cout << path(f).filename() << endl;
-
         FileHeader fh; memset(&fh, 0, sizeof(FileHeader));
         cdc_strm.stream_size = fh.f_dcm_size = DWord(file_size(f));
         fh.f_nm_cnt = f.length();
@@ -239,8 +267,13 @@ public:
 
         ifstream ifile;
         ifile.open(f, ios::binary); if (!ifile.is_open()) return false;
-        fh.f_cmp_size = compressFile(ifile, arch);
 
+        /////////////////////////////
+        cdc_cllbck->init();
+        curr_f_name = path(f).filename().string();
+        fh.f_cmp_size = compressFile(ifile, arch);
+        cout << endl;
+ 
         int e_pos = int(arch.tellp());
         arch.seekp(h_pos);
         arch.write((char*)&fh, sizeof(FileHeader));
@@ -254,6 +287,9 @@ public:
     bool archiveCreate(string &dir_name, string &arch_name) {
         /* TODO: prevent overwrite archive file name */
         /* TODO: add empty folders */
+
+        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
+            FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
 
         ofstream arch;
         arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
@@ -295,6 +331,10 @@ public:
     bool archiveExtract(string &arch_name, string &dir) {
         /* TODO: create root dir */
         /* TODO: use dir variable  */
+
+        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
+            FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+
         DWord f_cnt, f_flags;
         ifstream arch;
 
@@ -302,6 +342,7 @@ public:
         if (!readHeader(arch, &f_cnt, &f_flags)) return false;
 
         for (int i = 0; i < int(f_cnt); i++) {
+
             FileHeader fh;
             string f_name;
             arch.read((char*)&fh, sizeof(FileHeader));
@@ -329,8 +370,10 @@ public:
             cdc_strm.stream_size = fh.f_cmp_size;
 
             ////////////////////////////////
-            cout << p.filename() << endl;
+            cdc_cllbck->init();
+            curr_f_name = p.filename().string();
             decompressFile(arch, ofile);
+            cout << endl;
 
             if (ofile.is_open()) ofile.close();
         }
@@ -354,12 +397,18 @@ public:
     bool detectInput(string &&name) {
         string oname;
 
+        clock_t begin = clock();
+
+        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
+             FOREGROUND_GREEN);
+
         if (is_directory(name)) {
-            /* compress directory */
+            /*compress directory */
             createUniqueName(name, &oname);
-            cout << "compress directory" << endl << name << endl << oname << endl;
+            cout << " Compress   : " << path(name).filename() << " -> "
+                 << path(oname).filename() << endl << endl;
+
             archiveCreate(name, oname);
-            
         } else if(is_regular_file(name)) {
             DWord nul;
             ifstream ifile(name, ios::binary);
@@ -369,14 +418,16 @@ public:
                 /* decompress archive */
                 
                 createUniqueName(name, &oname, false);
-                cout << "decompress archive" << endl << name << endl << oname << endl;
+                cout << " Decompress : " << path(name).filename() << " -> "
+                     << path(oname).filename() << endl << endl;
                 archiveExtract(name, oname);
                 
             } else {
                 ifile.close();
                 /* compress one file */
                 createUniqueName(name, &oname);
-                cout << "compress file" << endl << name << endl << oname << endl;
+                cout << " Compress   : " << path(name).filename() << " -> "
+                     << path(oname).filename() << endl << endl;
                 archiveCreate(name, oname);
                 
             }
@@ -384,6 +435,23 @@ public:
         } else {
             return false;
         }
+
+        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
+            FOREGROUND_GREEN);
+
+        clock_t time = clock();
+        double sec = double(time - begin) / CLOCKS_PER_SEC;
+
+        cout << endl << " Ratio: "
+             << setw(10) << (float)total_output / (float)total_input * 100.0 << "% | Size: "
+             
+             << setw(6) << (total_input / 1024) << "kB -> "
+             << setw(6) << (total_output / 1024) << "kB | Time: "
+             << setw(4) << sec << "s "
+             << endl << endl << " ";
+        
+        _getch();
+
         return false;
     }
 };
@@ -392,29 +460,46 @@ class ConsoleCodecCallback : public CodecCallbackInterface {
 private:
     clock_t begin;
 public:
-    void clockStart() { begin = clock(); }
-    bool compressCallback(int in_size, int out_size, int stream_size) {
+    void init() { begin = clock(); }
+    bool compressCallback(int in_size, int out_size, int stream_size, const char *f_name) {
+        string fn;
+        if (f_name == nullptr) fn = "";
+        else {
+            fn = f_name;
+            fn.resize(28, ' ');
+        }
         clock_t time = clock();
         double sec = double(time - begin) / CLOCKS_PER_SEC;
-        cout << "\r" << (in_size)  / 1024 << " kB -> " 
-                     << (out_size) / 1024 << " kB | " 
-                     << ((int)((in_size / (float)stream_size) * 100)) << "% | "
-                     << sec << " sec\t";
+        cout << "\r" 
+             << setw(4) << ((int)((in_size / (float)stream_size) * 100)) << "% | "
+             << setw(10) << sec << "s | "
+             << setw(10) << (in_size) / 1024 << "kB -> "
+             << setw(8) << (out_size) / 1024 << "kB | "
+             << fn;
         return true;
     }
-    bool decompressCallback(int in_size, int out_size, int stream_size) {
-        return compressCallback(in_size, out_size, stream_size); }
+    bool decompressCallback(int in_size, int out_size, int stream_size, const char *f_name) {
+        return compressCallback(in_size, out_size, stream_size, f_name); }
 };
 
 class ConsoleApplication {
 public:
     int run(int argc, char const *argv[]) {
 
-        cout << S_INF << endl;
+        SetConsoleTitle(S_TITLE);
+
+        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
+            FOREGROUND_GREEN);
+        cout << S_INF1 << endl;
+
+        SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
+            FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+        cout << S_INF2 << endl;
+
 
         if (argc > 1) {
             CodecSettings        sttgs;
-            sttgs.Set(16, 16, 2, 8, 16, 3/*<-3*/, 3);
+            sttgs.Set(16, 16, 2, 8, 16, 3, 3);
             sttgs.byte_lkp_hsh = 5;
 
             LZHX                 lzhx(&sttgs);
@@ -426,10 +511,17 @@ public:
             lzhx.setCodec(&lz);
             lzhx.setCallback(&callback);
 
-            callback.clockStart();
-
             lzhx.detectInput(string(argv[1]));
-        } else { cout << S_INF << endl << S_USAGE << endl; }
+        } else {
+            SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
+                FOREGROUND_GREEN);
+            cout << S_USAGE1 << endl;
+
+            SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE),
+                FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+            cout << S_USAGE2 << endl;
+            _getch();
+        }
         return 0;
     }
 };
@@ -439,7 +531,8 @@ int main(int argc, char const *argv[]) {
     LZHX::ConsoleApplication app;
     try { return app.run(argc, argv);
     } catch (string &msg)  { cout << msg << endl;
-    } catch (exception &e) { cout << "exception: " << e.what() << endl;
-    } catch (...) {          cout << "unknown exception" << endl; }
+    } catch (exception &e) { cout << S_ERR_EX   << e.what() << endl;
+    } catch (...) {          cout << S_ERR_UNEX << endl; }
+    _getch();
     return 1;
 }

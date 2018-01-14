@@ -28,8 +28,9 @@ struct CodecBuffer {
 
 class CodecCallbackInterface {
 public:
-    virtual bool   compressCallback(int in_size, int out_size, int stream_size) = 0;
-    virtual bool decompressCallback(int in_size, int out_size, int stream_size) = 0;
+    virtual void init() = 0;
+    virtual bool   compressCallback(int in_size, int out_size, int stream_size, const char *f_name) = 0;
+    virtual bool decompressCallback(int in_size, int out_size, int stream_size, const char *f_name) = 0;
 };
 
 class CodecStream {
