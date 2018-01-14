@@ -46,6 +46,8 @@ using namespace std::experimental::filesystem::v1;
 
 namespace LZHX {
 
+enum AH_FLAGS { AF_ENCRYPT = 0x1 };
+
 struct ArchiveHeader {
     Byte  f_sig[4];   // LZHX
     DWord f_sig2;     // 0xFFFFFFFB
@@ -54,6 +56,8 @@ struct ArchiveHeader {
     QWord a_unc_size; // archive uncompressed size
     QWord a_cmp_size; // archive compressed size
 };
+
+enum FH_FLAGS { FF_DIR = 0x1 };
 
 struct FileHeader {
     Byte  f_flags;    // flags
@@ -262,38 +266,45 @@ private:
     }
 
 public:
-    bool archiveAddFile(ofstream &arch, string &f) {
-        FileHeader fh; memset(&fh, 0, sizeof(FileHeader));
-        cdc_strm.stream_size = fh.f_dcm_size = DWord(file_size(f));
-        fh.f_nm_cnt = f.length();
+    bool archiveAddFile(ofstream &arch, string &f, bool dir = false) {
+        ifstream ifile;
+        FileHeader fh;
+        memset(&fh, 0, sizeof(FileHeader));
+        
+        if (dir) fh.f_flags = FF_DIR;
 
-        /* TODO: more file information */
+        fh.f_nm_cnt = f.length();
         fh.f_attr = getFileAttributes(f.c_str());
-        getFileTime(f.c_str(), &fh.f_cr_time, &fh.f_la_time, &fh.f_lw_time);
+        getFileTime(f.c_str(), &fh.f_cr_time, &fh.f_la_time, &fh.f_lw_time, dir);
 
         int h_pos = int(arch.tellp());
 
         arch.write((char*)&fh, sizeof(FileHeader));
         arch.write((char*)f.c_str(), fh.f_nm_cnt);
 
-        ifstream ifile;
-        ifile.open(f, ios::binary); if (!ifile.is_open()) return false;
+        if (!dir) {
+            ifile.open(f, ios::binary); if (!ifile.is_open()) return false;
 
-        cdc_cllbck->init();
-        curr_f_name = path(f).filename().string();
+            cdc_strm.stream_size = fh.f_dcm_size = DWord(file_size(f));
+            curr_f_name = path(f).filename().string();
 
-        initHash();
-        fh.f_cmp_size = compressFile(ifile, arch);
-        fh.f_cnt_hsh = f_hash;
+            cdc_cllbck->init(); initHash();
+            fh.f_cmp_size = compressFile(ifile, arch);
+            fh.f_cnt_hsh = f_hash;
 
-        cout << endl;
+            cout << endl;
+ 
+            int e_pos = int(arch.tellp());
+            arch.seekp(h_pos);
+            arch.write((char*)&fh, sizeof(FileHeader));
+            arch.seekp(e_pos);
 
-        int e_pos = int(arch.tellp());
-        arch.seekp(h_pos);
-        arch.write((char*)&fh, sizeof(FileHeader));
-        arch.seekp(e_pos);
+            if (ifile.is_open()) ifile.close();
+        }
+        /*else {
+            DUMP(f);
+        }*/
 
-        if (ifile.is_open()) ifile.close();
         return true;
     }
 
@@ -322,8 +333,13 @@ public:
                         return false;
 
                     f_cnt++;
+                } if (is_directory(f)) {
+                    if (!archiveAddFile(arch, f, true))
+                        return false;
+                    f_cnt++;
                 }
             }
+
         } else if(is_regular_file(dir)) {
             string &f = (string&)dir.filename().string();
             if (!archiveAddFile(arch, f))
@@ -363,7 +379,9 @@ public:
                 for (auto it = p.begin(); it != p.end(); it++)
                     if (it != p.begin()) newp.append(*it);
                 p = newp;
-                create_directories(p.parent_path());
+                if (fh.f_flags& FF_DIR) create_directories(p);
+                else create_directories(p.parent_path());
+
             } else {
                 path base(f_name), pxt = p.extension();
                 base.replace_extension("");
@@ -373,25 +391,25 @@ public:
                 }
             }
 
-            ofstream ofile;
-            ofile.open(p, ios::binary);
-            cdc_strm.stream_size = fh.f_cmp_size;
+            if (!(fh.f_flags & FF_DIR)) {
+                ofstream ofile;
+                ofile.open(p, ios::binary);
+                cdc_strm.stream_size = fh.f_cmp_size;
 
-            cdc_cllbck->init();
-            curr_f_name = p.filename().string();
-            initHash();
-            decompressFile(arch, ofile);
+                cdc_cllbck->init(); initHash();
+                curr_f_name = p.filename().string();
+                decompressFile(arch, ofile);
 
-            if (f_hash != fh.f_cnt_hsh) {
-                cout << endl << "Error - different FNV hashes" << endl; }
+                if (f_hash != fh.f_cnt_hsh) 
+                    cout << endl << "Error - different FNV hashes" << endl;
 
-            cout << endl;
+                cout << endl;
+                if (ofile.is_open()) ofile.close();
+            }
 
-            if (ofile.is_open()) ofile.close();
-
-            /* TODO: file info */
             setFileAttributes((char const *)(p.string().c_str()), fh.f_attr);
-            setFileTime((char const *)(p.string().c_str()), fh.f_cr_time, fh.f_la_time, fh.f_lw_time);
+            setFileTime((char const *)(p.string().c_str()),
+                fh.f_cr_time, fh.f_la_time, fh.f_lw_time, (bool)(fh.f_flags & FF_DIR));
         }
 
         if (arch.is_open()) arch.close();

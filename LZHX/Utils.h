@@ -27,9 +27,9 @@ void setConsoleTextNormal();
 void setConsoleTitle(char const *tit);
 void consoleWait();
 DWord getFileAttributes(char const *f_name);
-bool  setFileAttributes(char const *f_name, DWord attr);
-void getFileTime(char const *f_name, QWord *fcr, QWord *fla, QWord *lwr);
-void  setFileTime(char const *f_name, QWord fcr, QWord fla, QWord lwr);
+bool setFileAttributes(char const *f_name, DWord attr);
+void getFileTime(char const *f_name, QWord *fcr, QWord *fla, QWord *lwr, bool dir = false);
+void setFileTime(char const *f_name, QWord fcr, QWord fla, QWord lwr, bool dir = false);
 
 
 

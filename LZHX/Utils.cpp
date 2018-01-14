@@ -71,23 +71,23 @@ DWord LZHX::getFileAttributes(char const *f_name) {
 bool LZHX::setFileAttributes(char const *f_name, DWord attr) {
     return (bool)SetFileAttributes(f_name, attr);
 }
-void LZHX::getFileTime(char const *f_name, QWord *fcr, QWord *fla, QWord *lwr) {
+void LZHX::getFileTime(char const *f_name, QWord *fcr, QWord *fla, QWord *lwr, bool dir) {
     FILETIME ft1, ft2, ft3;
     HANDLE hf = CreateFile(f_name, GENERIC_READ, FILE_SHARE_READ, NULL,
-                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        OPEN_EXISTING, (dir ? (FILE_ATTRIBUTE_DIRECTORY | FILE_FLAG_BACKUP_SEMANTICS) : FILE_ATTRIBUTE_NORMAL), NULL);
     GetFileTime(hf, &ft1, &ft2, &ft3);
     CloseHandle(hf);
     *fcr = QWord(ft1.dwHighDateTime) << 32 | ft1.dwLowDateTime;
     *fla = QWord(ft2.dwHighDateTime) << 32 | ft2.dwLowDateTime;
     *lwr = QWord(ft3.dwHighDateTime) << 32 | ft3.dwLowDateTime;
 }
-void LZHX::setFileTime(char const *f_name, QWord fcr, QWord fla, QWord lwr) {
+void LZHX::setFileTime(char const *f_name, QWord fcr, QWord fla, QWord lwr, bool dir) {
     FILETIME ft1, ft2, ft3;
     ft1.dwHighDateTime = (fcr >> 32); ft1.dwLowDateTime = fcr & 0xFFFFFFFF;
     ft2.dwHighDateTime = (fla >> 32); ft2.dwLowDateTime = fla & 0xFFFFFFFF;
     ft3.dwHighDateTime = (lwr >> 32); ft3.dwLowDateTime = lwr & 0xFFFFFFFF;
-    HANDLE hf = CreateFile(f_name, GENERIC_ALL, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
-        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE hf = CreateFile(f_name, GENERIC_ALL,  FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+        OPEN_EXISTING, (dir ? (FILE_FLAG_BACKUP_SEMANTICS | FILE_ATTRIBUTE_DIRECTORY) : FILE_ATTRIBUTE_NORMAL), NULL);
     SetFileTime(hf, &ft1, &ft2, &ft3);
     CloseHandle(hf);
 }
