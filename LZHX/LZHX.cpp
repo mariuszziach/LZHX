@@ -160,20 +160,24 @@ private:
     bool do_encrypt;// , enc_hash;
     string ekey;
     int key_pos, key_size;
-    
+    clock_t begin;
     DWord encrypted_hash;
 
     Byte encryptByte(Byte b) {
-        return b ^ ekey[key_pos++ % key_size] ^ (key_pos * 3);
+        char c = ekey[key_pos++ % key_size];
+        return b ^ c ^ (key_pos * 3) ^ (c * 5);
     }
     Byte decryptByte(Byte b) {
-        return b ^ ekey[key_pos++ % key_size] ^ (key_pos * 3);
+        char c = ekey[key_pos++ % key_size];
+        return b ^ c ^ (key_pos * 3) ^ (c * 5);
     }
 public:
     void initEncryption(bool do_encrypt, ifstream *arch, ofstream *arch2) {
+        begin = clock();
+
         this->do_encrypt = do_encrypt;
         this->key_pos    = 0;
-        this->key_size   = ekey.length();
+        this->key_size   = int(ekey.length());
         if (do_encrypt) {
             DWord hash = 0x811C9DC5;
             encrypted_hash = 0;
@@ -341,7 +345,7 @@ public:
         
         if (dir) fh.f_flags = FF_DIR;
 
-        fh.f_nm_cnt = f.length();
+        fh.f_nm_cnt = DWord(f.length());
         fh.f_attr = getFileAttributes(f.c_str());
         getFileTime(f.c_str(), &fh.f_cr_time, &fh.f_la_time, &fh.f_lw_time, dir);
 
@@ -515,7 +519,7 @@ public:
     bool detectInput(string &&name) {
         string oname;
         bool act_cmp = true;
-        clock_t begin = clock();
+        
 
         setConsoleTextRed();
 
