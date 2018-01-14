@@ -7,11 +7,11 @@
 #ifndef LZHX_UTILS_H
 #define LZHX_UTILS_H
 
+// stl
 #include <fstream>
 #include "Types.h"
 
-#define DUMP(varname) fprintf(stderr,  "%s\t= %i\n", #varname, varname);
-#define DUMPS(varname) fprintf(stderr, "%s\t= %s\n", #varname, varname);
+#define DUMP(a) std::cout << #a " = " << (a) << std::endl; 
 
 namespace LZHX {
 
@@ -21,6 +21,13 @@ int   write16To8Buf (Byte *buf, Word  i);
 DWord read32From8Buf(Byte *buf);
 Word  read16From8Buf(Byte *buf);
 
+// windows console
+void setConsoleTextRed();
+void setConsoleTextNormal();
+void setConsoleTitle(char const *tit);
+void consoleWait();
+DWord getFileAttributes(char const *f_name);
+bool  setFileAttributes(char const *f_name, DWord attr);
 } // namespace
 
 #endif // LZHX_UTILS_H
