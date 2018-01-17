@@ -50,21 +50,24 @@
     <ClInclude Include="Utils.h">
       <Filter>Pliki nagłówkowe</Filter>
     </ClInclude>
-    <ClInclude Include="resource.h">
+    <ClInclude Include="Globals.h">
+      <Filter>Pliki nagłówkowe</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
       <Filter>Pliki nagłówkowe</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="resource.rc">
+    <Image Include="ProgramIcon.ico">
       <Filter>Pliki zasobów</Filter>
-    </ResourceCompile>
+    </Image>
+    <Image Include="FileTypeIcon.ico">
+      <Filter>Pliki zasobów</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="icon.ico">
+    <ResourceCompile Include="Resource.rc">
       <Filter>Pliki zasobów</Filter>
-    </Image>
-    <Image Include="fileicon.ico">
-      <Filter>Pliki zasobów</Filter>
-    </Image>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

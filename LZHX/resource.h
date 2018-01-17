@@ -1,17 +1,13 @@
-//{{NO_DEPENDENCIES}}
-// Plik do³¹czany wygenerowany przez œrodowisko Microsoft Visual C++.
-// U¿ywany przez: resource.rc
-//
-#define IDI_ICON1                       101
-#define IDI_ICON2                       102
+/////////////////////////////////////////
+// Lempel-Ziv-Huffman File Compressor  //
+// author: mariusz.ziach@gmail.com     //
+// date  : 2018                        //
+/////////////////////////////////////////
 
-// Next default values for new objects
-// 
-#ifdef APSTUDIO_INVOKED
-#ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        103
-#define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1001
-#define _APS_NEXT_SYMED_VALUE           101
-#endif
-#endif
+#ifndef LZHX_RESOURCE_H
+#define LZHX_RESOURCE_H
+
+#define IDI_PROGRAMICON  101
+#define IDI_FILETYPEICON 102
+
+#endif // LZHX_RESOURCE_H

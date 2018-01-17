@@ -17,35 +17,44 @@ CodecBuffer *CodecStream::find(CodecBufferType type) {
     }
     return nullptr;
 }
+
 // convert bit values to byte values and masks
 void CodecSettings::Set(DWord bit_blk_cap, DWord bit_lkp_cap,
     DWord bit_lkp_hsh, DWord bit_mtch_len,
     DWord bit_mtch_pos, DWord bit_bffr_cnt, 
     DWord bit_runs) {
+
+    // working buffers capacity
     this->bit_blk_cap = bit_blk_cap;
     byte_blk_cap = 1 << bit_blk_cap;
     mask_blk_cap = byte_blk_cap - 1;
 
+    // lookup table capacity
     this->bit_lkp_cap = bit_lkp_cap;
     byte_lkp_cap = 1 << bit_lkp_cap;
     mask_lkp_cap = byte_lkp_cap - 1;
 
+    // how many bytes are used to count hash for lookup table key
     this->bit_lkp_hsh = bit_lkp_hsh;
     byte_lkp_hsh = 1 << bit_lkp_hsh;
     mask_lkp_hsh = byte_lkp_hsh - 1;
 
+    // max LZ match size
     this->bit_mtch_len = bit_mtch_len;
     byte_mtch_len = 1 << bit_mtch_len;
     mask_mtch_len = byte_mtch_len - 1;
 
+    // max LZ match pos
     this->bit_mtch_pos = bit_mtch_pos;
     byte_mtch_pos = 1 << bit_mtch_pos;
     mask_mtch_pos = byte_mtch_pos - 1;
 
+    // working buffer count
     this->bit_bffr_cnt = bit_bffr_cnt;
     byte_bffr_cnt = 1 << bit_bffr_cnt;
     mask_bffr_cnt = byte_bffr_cnt - 1;
 
+    // how many times LZ searching procedure is trying to find best match
     this->bit_runs = bit_runs;
     byte_runs = 1 << bit_runs;
     mask_runs = byte_runs - 1;

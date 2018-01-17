@@ -8,13 +8,18 @@
 
 using namespace LZHX;
 
-BitStream::BitStream() { buf = nullptr; resetPos(); }
-void BitStream::assignBuffer(Byte *buf) { this->buf = buf; resetPos(); }
-int  BitStream::getBitPos() { return bit_pos; }
-int  BitStream::getBytePos() { return byte_pos; }
-void BitStream::setBitPos(int bit_pos) { this->bit_pos = bit_pos; }
+// constructor/destructors
+BitStream::BitStream()                  { this->buf = nullptr; resetPos(); }
+void BitStream::assignBuffer(Byte *buf) { this->buf = buf;     resetPos(); }
+
+// positioning
+int  BitStream::getBitPos ()  { return bit_pos;  }
+int  BitStream::getBytePos()  { return byte_pos; }
+void BitStream::setBitPos (int bit_pos ) { this->bit_pos  = bit_pos; }
 void BitStream::setBytePos(int byte_pos) { this->byte_pos = byte_pos; }
 void BitStream::resetPos() { bit_pos = byte_pos = 0; }
+
+// writing
 void BitStream::writeBit(int bit) {
 	if (bit_pos == 0) { buf[byte_pos] = bit & 1; bit_pos++; }
     else { buf[byte_pos] |= ((bit & 1) << bit_pos++); }
@@ -24,6 +29,8 @@ void BitStream::writeBits(int bits, int count) {
     if (count == 8 && bit_pos == 0) { buf[byte_pos++] = bits; }
     else { for (int i = 0; i < count; i++) { writeBit(bits >> i); } }
 }
+
+// reading
 int BitStream::readBit() {
 	int ret = (buf[byte_pos] >> bit_pos++) & 1;
 	if (bit_pos > 7) { bit_pos = 0; byte_pos++; }

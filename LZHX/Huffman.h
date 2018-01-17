@@ -13,8 +13,8 @@
 
 namespace LZHX {
 
+// huffman tree node
 class HuffmanTree {
-
 public:
 	HuffmanTree *left, *right;
     int symbol, freq;
@@ -23,6 +23,7 @@ public:
 	bool isLeaf();
 };
 
+// huffman code
 class HuffmanCode {
 public:
 	int code, bit_count;
@@ -30,23 +31,20 @@ public:
 	HuffmanCode();
 };
 
+// symbol pair for building tree
 class HuffmanSymbolPair {
 public:
-	HuffmanTree *first;
-	HuffmanTree *second;
+	HuffmanTree *first, *second;
 	HuffmanSymbolPair();
 };
 
+// huffman compression algorithm
 class Huffman : public CodecInterface {
 private:
-	int alphabet_size;
-	int nodes_array_size;
-    int total_in, total_out;
-    int stream_size;
-	CodecStream *codec_stream;
-	HuffmanTree  *nodes;
-	HuffmanTree  *parents;
-	HuffmanTree  *root;
+	int alphabet_size,nodes_array_size,
+        total_in, total_out,stream_size;
+	CodecStream  *codec_stream;
+	HuffmanTree  *nodes, *parents, *root;
 	HuffmanCode  *codes;
 	BitStream    *bit_stream;
 	void reset();

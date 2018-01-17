@@ -11,6 +11,7 @@
 
 namespace LZHX {
 
+// easy bit reading/writing used in huffman compression
 class BitStream {
 private:
     Byte *buf;
@@ -18,13 +19,16 @@ private:
 public:
 	BitStream();
 	void assignBuffer(Byte *buf);
+    // pos
 	int  getBitPos();
 	int  getBytePos();
 	void setBitPos(int bit_pos);
 	void setBytePos(int byte_pos);
 	void resetPos();
+    // write
 	void writeBit(int bit);
 	void writeBits(int bits, int count);
+    // read
 	int readBit();
 	int readBits(int count);
 };

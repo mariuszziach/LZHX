@@ -14,72 +14,68 @@
 
 namespace LZHX {
 
+// dictionary buffer
 class LZDictionaryBuffer {
 public:
     Byte *arr;
     int pos, size, cap;
-    LZDictionaryBuffer(int cap = 0xFFFF);
+    LZDictionaryBuffer(int cap);
     ~LZDictionaryBuffer();
     Byte *putByte(Byte val);
-    Byte getByte(int p);
-    int getPos();
-    int convPos(bool absToRel, int pos);
+    Byte  getByte(int p);
+    int   getPos();
+    int   convPos(bool absToRel, int pos);
 };
 
+// lz match 
 class LZMatch {
 public:
-    int pos;
-    int len;
-
+    int pos, len;
     LZMatch();
     void clear();
     void copy(LZMatch *lzm);
 };
 
+// lz lookup table node
 class LZDictionaryNode {
 public:
     int pos;
-    LZDictionaryNode *next;
-    LZDictionaryNode *prev;
     bool valid;
-
+    LZDictionaryNode *next, *prev;
     LZDictionaryNode();
     void clear();
 };
 
+// lz match finder
 class LZMatchFinder {
 private:
+    int cyclic_iterator, buf_size;
+    Byte *buf;
     CodecSettings *cdc_sttgs;
     LZDictionaryBuffer *lz_buf;
-    Byte *buf;
-    LZDictionaryNode *hash_map;
-    LZDictionaryNode *cyclic_buf;
-    int cyclic_iterator, buf_size;
+    LZDictionaryNode *hash_map, *cyclic_buf;
     LZMatch *best_match;
-
 public:
     LZMatchFinder(CodecSettings *cdc_sttgs);
     ~LZMatchFinder();
     void assignBuffer(Byte *buf, int buf_size, LZDictionaryBuffer *lz_buf);
-    int hash(Byte *in);
+    int  hash(Byte *in);
     void insert(int pos);
     LZMatch *find(int pos);
 };
 
+// lz algorithm main class
 class LZ : public CodecInterface {
 private:
-    int total_in;
-    int total_out;
-    int stream_size;
-    CodecStream *codec_stream;
+    int total_in, total_out, stream_size;
+    CodecStream   *codec_stream;
     CodecSettings *cdc_sttgs;
-    BitStream    *bit_stream;
+    BitStream     *bit_stream;
     LZMatchFinder      *lz_mf;
     LZMatch            *lz_match;
     LZDictionaryBuffer *lz_buf;
-
+    Byte               *tmp_btebf;
 public:
-
     LZ(CodecSettings *cdc_sttgs);
     ~LZ();
     CodecType getCodecType();
