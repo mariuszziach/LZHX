@@ -7,6 +7,7 @@
 // stl
 #include <filesystem>
 #include <iostream>
+#include <sstream>
 #include <iomanip>
 #include <fstream>
 #include <string>
@@ -54,6 +55,10 @@ char const S_PASS1 []   = " Type password if you want to encrypt this archive or
 char const S_PASS2 []   = " Archive is encrypted. Type password:";
 char const S_COMP  []   = " Compress   : ";
 char const S_DECOMP[]   = " Decompress : ";
+char const S_LST_AR[]   = "Archive                   : ";
+char const S_LST_FC[]   = "Files/folders in archive  : ";
+char const S_LST_US[]   = "Uncompressed archive size : ";
+char const S_LST_HD[]   = "  FNV Hash        Compressed       Uncompressed  Name";
 
 Byte  const sig[4] = { 'L','Z','H','X' };
 char  const ext[5] = "lzhx";
@@ -428,7 +433,7 @@ public:
         return true;
     }
 
-    bool archiveExtract(string &arch_name, string &dir) {
+    bool archiveExtract(string &arch_name, string &dir, bool list) {
         setConsoleTextNormal();
 
         QWord a_unc_size(0), a_cmp_size(0);
@@ -446,6 +451,15 @@ public:
 
         initEncryption(f_flags & AF_ENCRYPT, &arch, nullptr);
 
+        ofstream flist;
+        if (list) {
+            flist.open(dir);
+            flist << S_LST_AR << path(arch_name).filename() << endl;
+            flist << S_LST_FC << f_cnt << endl;
+            flist << S_LST_US << a_unc_size/1024 << " kB" << endl << endl;
+            flist << S_LST_HD << endl;
+        }
+
         for (int i = 0; i < int(f_cnt); i++) {
 
             FileHeader fh;
@@ -453,6 +467,26 @@ public:
             arch.read((char*)&fh, sizeof(FileHeader));
 
             for (int j = 0; j < int(fh.f_nm_cnt); j++) f_name += (char)arch.get();
+
+            if (list) {
+                if (fh.f_flags & FF_DIR)
+                {
+                    for (int w = 0; w < 39; w++) flist << ' ';
+                    flist << f_name << endl;
+                }
+                else {
+                    std::stringstream sh;
+                    sh << uppercase << hex << setfill('0') << setw(8) << fh.f_cnt_hsh;
+
+                    flist << setw(10) << sh.str() << " "
+                        << setw(15) <<  fh.f_cmp_size / 1024 << " kB "
+                        << setw(15) <<  fh.f_dcm_size / 1024 << " kB ";
+                    flist << f_name << endl;
+                }
+
+                arch.seekg(fh.f_cmp_size, ios::cur);
+                continue;
+            }
 
             path p(f_name);
             if (p.has_parent_path()) {
@@ -500,23 +534,23 @@ public:
                 fh.f_cr_time, fh.f_la_time, fh.f_lw_time, (bool)(fh.f_flags & FF_DIR));
         }
 
-        if (arch.is_open()) arch.close();
+        if (arch.is_open())  arch.close();
+        if (flist.is_open()) flist.close();
         return true;
     }
 
-    void createUniqueName(string &name, string *out, bool wext = true) {
+    void createUniqueName(string &name, string *out, char const *next) {
         path pn(name), base(name);
-        string xt (wext ? ext : "");
         base.replace_extension("");
-        pn.replace_extension(xt);
+        pn.replace_extension(next);
         while (exists(pn)) {
             pn = base.concat("0");
-            pn.replace_extension(xt);
+            pn.replace_extension(next);
         }
         *out = pn.string();
     }
 
-    bool detectInput(string &&name) {
+    bool detectInput(string &&name, bool list) {
         string oname;
         bool act_cmp = true;
         
@@ -524,7 +558,7 @@ public:
         setConsoleTextRed();
 
         if (is_directory(name)) {
-            createUniqueName(name, &oname);
+            createUniqueName(name, &oname, ext);
             cout << S_COMP << path(name).filename() << " -> "
                  << path(oname).filename() << endl << endl;
             archiveCreate(name, oname);
@@ -535,13 +569,14 @@ public:
             if (readHeader(ifile, (DWord*)&nul, (DWord*)&nul, &nul, &nul)) {
                 ifile.close();
                 act_cmp = false;
-                createUniqueName(name, &oname, false);
+                if (!list) createUniqueName(name, &oname, "");
+                else createUniqueName(name, &oname, "txt");
                 cout << S_DECOMP << path(name).filename() << " -> "
                      << path(oname).filename() << endl << endl;
-                archiveExtract(name, oname);
+                archiveExtract(name, oname, list);
             } else {
                 ifile.close();
-                createUniqueName(name, &oname);
+                createUniqueName(name, &oname, ext);
                 cout << S_COMP << path(name).filename() << " -> "
                      << path(oname).filename() << endl << endl;
                 archiveCreate(name, oname);
@@ -620,7 +655,9 @@ public:
             lzhx.setCodec(&huffman);
             lzhx.setCodec(&lz);
             lzhx.setCallback(&callback);
-            lzhx.detectInput(string(argv[1]));
+            bool list = false;
+            if (argc > 2) list = (bool)(argv[2][1] == 'l' || argv[2][1] == 'L');
+            lzhx.detectInput(string(argv[1]), list);
         } else {
             setConsoleTextRed();
             cout << S_USAGE1 << endl;
