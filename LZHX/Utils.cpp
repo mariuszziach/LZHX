@@ -11,14 +11,18 @@
 // stl
 #include <fstream>
 #include <iostream>
+#include <sstream>
+#include <iomanip>
 
 // windows
 #include <windows.h>
 #include <conio.h>
 
+// LZHX
 #include "Utils.h"
 
 using namespace LZHX;
+using namespace std;
 
 // get file size
 int LZHX::getFSize(std::ifstream &ifs) {
@@ -66,8 +70,97 @@ void LZHX::setConsoleTextNormal() {
 void LZHX::setConsoleTitle(char const *tit) { SetConsoleTitle(tit); }
 void LZHX::consoleWait() {
     setConsoleTextNormal();
-    std::cout << S_CLOSE;
+    cout << S_CLOSE;
     _getch();
+}
+void LZHX::consoleEndLine() {
+    cout << endl;
+}
+void  LZHX::consoleWriteEndLine(char const *msg) {
+    cout << msg << endl;
+}
+void LZHX::consoleAskPassword1(string &pass) {
+    setConsoleTextNormal();
+    cout << S_PASS1 << endl << endl << " ";
+    getline(cin, pass, '\n');
+    consoleEndLine();
+}
+void LZHX::consoleAskPassword2(string &pass) {
+    setConsoleTextNormal();
+    cout << S_PASS2 << endl << endl << " ";
+    getline(cin, pass, '\n');
+    consoleEndLine();
+}
+void LZHX::consoleCompWrite(const char *f_name1,
+    const char *f_name2) {
+    cout << S_COMP << f_name1 << " -> "
+        << f_name2 << endl << endl;
+}
+void LZHX::consoleDecompWrite(const char *f_name1,
+    const char *f_name2) {
+    cout << S_DECOMP << f_name1 << " -> "
+        << f_name2 << endl << endl;
+}
+void LZHX::consoleListWrite(const char *f_name1,
+    const char *f_name2) {
+    cout << S_LIST << f_name1 << " -> "
+        << f_name2 << endl << endl;
+}
+void LZHX::consolePrintProgress(const char *f_name, int pr,
+    float sec, int in_s, int out_s) {
+    string fn;
+    if (f_name == nullptr){
+        fn = S_EMPTY;
+    } else {
+        fn = f_name;
+        fn.resize(28, ' ');
+    }
+    cout << "\r"
+         << setw(5) << pr  << "% | "
+         << setw(9) << sec << "s | "
+         << setw(9) << (in_s)  / 1024 << "kB -> "
+         << setw(9) << (out_s) / 1024 << "kB | "
+         << fn;
+}
+void LZHX::consoleSummaryWrite(QWord tot_in, QWord tot_out, float sec, bool cmp) {
+    int w1(9), w2(9), w3(4);
+    if (cmp) {
+        w1 = 6; w2 = 6; w3 = 5;
+        cout << endl << " Ratio: "
+            << setw(10) << (float)tot_out / (float)tot_in * 100.0 << "% |";
+    } else {
+        cout << endl;
+        for (int k = 0; k < 15; k++) cout << " ";
+    }
+    cout << " Size: " 
+        << setw(w1) << (tot_in / 1024)  << "kB -> "
+        << setw(w2) << (tot_out / 1024) << "kB | Time: "
+        << setw(w3) << sec << "s "
+        << endl << endl << " ";
+}
+
+// file list output
+void LZHX::fileListWriteHeader(ofstream &ofs, DWord a_cnt,
+                               QWord a_unc, const char *a_name) {
+    ofs << S_LST_AR << a_name << endl;
+    ofs << S_LST_FC << a_cnt << endl;
+    ofs << S_LST_US << a_unc / 1024 << " kB" << endl << endl;
+    consoleEndLine();
+}
+void LZHX::fileListWriteFile(ofstream &ofs, const char *f_name,
+                             LZHX::FileHeader *fh) {
+    if (fh->f_flags & FF_DIR)
+    {
+        for (int w = 0; w < 39; w++) ofs << ' ';
+        ofs << f_name << endl;
+    } else {
+        std::stringstream sh;
+        sh << uppercase << hex << std::setfill('0') << std::setw(8) << fh->f_cnt_hsh;
+        ofs << std::setw(10) << sh.str() << " "
+            << std::setw(15) << fh->f_cmp_size / 1024 << " kB "
+            << std::setw(15) << fh->f_dcm_size / 1024 << " kB ";
+        ofs << f_name << endl;
+    }
 }
 
 // file attributes

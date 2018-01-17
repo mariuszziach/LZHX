@@ -9,14 +9,15 @@
 
 // stl
 #include <fstream>
+#include <string>
+
+// LZHX
 #include "Types.h"
 #include "Globals.h"
 
 #define DUMP(a) std::cout << #a " = " << (a) << std::endl; 
 
 namespace LZHX {
-
-// extern char const ext[5];
 
 int   getFSize (std::ifstream &ifs);
 
@@ -31,6 +32,23 @@ void setConsoleTextRed();
 void setConsoleTextNormal();
 void setConsoleTitle(char const *tit);
 void consoleWait();
+void consoleEndLine();
+void consoleWriteEndLine(char const *msg);
+void consoleAskPassword1(std::string &pass);
+void consoleAskPassword2(std::string &pass);
+void consoleCompWrite  (const char *f_name1, const char *f_name2);
+void consoleDecompWrite(const char *f_name1, const char *f_name2);
+void consoleListWrite  (const char *f_name1, const char *f_name2);
+void consolePrintProgress(const char *f_name, int pr,
+    float sec, int in_s, int out_s);
+void consoleSummaryWrite(QWord tot_in, QWord tot_out,
+    float sec, bool cmp);
+
+// file list output
+void fileListWriteHeader(std::ofstream &ofs, DWord a_cnt,
+    QWord a_unc, const char *a_name);
+void fileListWriteFile(std::ofstream &ofs, const char *f_name,
+    FileHeader *fh);
 
 // file attributes
 DWord getFileAttributes(char const *f_name);

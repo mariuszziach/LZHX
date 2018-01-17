@@ -36,21 +36,21 @@ namespace LZHX {
 
 class LZHX {
 private:
-    QWord total_input;
-    QWord total_output;
     string curr_f_name;
     clock_t c_begin;
+    QWord total_input;
+    QWord total_output;
     CodecBuffer *cdc_bffrs;
     CodecStream  cdc_strm;
     CodecInterface *lz_cdc, *hf_cdc;
-    CodecCallbackInterface *cdc_cllbck;
     CodecSettings *sttgs;
+    CodecCallbackInterface *cdc_cllbck;
 
     // function for counting working buffer size
     int outBlkSize(int inBlkSize) { return inBlkSize * 2; }
     
     // init archiving
-    bool init() {
+    void init() {
         c_begin = clock();
         cdc_strm.buf_count = sttgs->byte_bffr_cnt;
         cdc_strm.buf_stack = cdc_bffrs;
@@ -58,7 +58,6 @@ private:
             cdc_bffrs[i].size = 0;
             cdc_bffrs[i].type = CBT_EMPTY;
         }
-        return true;
     }
 public:
     LZHX(CodecSettings *sttgs) {
@@ -72,7 +71,7 @@ public:
         this->sttgs = sttgs;
         lz_cdc = hf_cdc = nullptr;
         cdc_cllbck      = nullptr;
-        curr_f_name     = "";
+        curr_f_name     = S_EMPTY;
         total_input = total_output = 0;
         
     }
@@ -114,12 +113,12 @@ public:
 private:
     int key_pos, key_size;
     bool do_encrypt;
-    string ekey;
     DWord encrypted_hash;
+    string e_key;
 
     // encryption functions 
     Byte encryptByte(Byte b) {
-        char c = ekey[key_pos++ % key_size];
+        char c = e_key[key_pos++ % key_size];
         return b ^ c ^ (key_pos * 3) ^ (c * 5);
     }
     Byte decryptByte(Byte b) {
@@ -130,23 +129,23 @@ public:
     void initEncryption(bool do_encrypt, ifstream *arch, ofstream *arch2) {
         this->do_encrypt = do_encrypt;
         this->key_pos    = 0;
-        this->key_size   = int(ekey.length());
+        this->key_size   = int(e_key.length());
         if (do_encrypt) {
 
             // encrypt hashed password
             DWord hash = 0x811C9DC5;
             encrypted_hash = 0;
-            if (!ekey.empty()) {
+            if (!e_key.empty()) {
                 int i;
                 for (i = 0; i < this->key_size; i++) {
-                    hash ^= ekey[i];
+                    hash ^= e_key[i];
                     hash *= 0x1000193;
                 }
                 i = 0;
-                encrypted_hash |= ekey[i++ % this->key_size];
-                encrypted_hash |= ekey[i++ % this->key_size] << 8;
-                encrypted_hash |= ekey[i++ % this->key_size] << 16;
-                encrypted_hash |= ekey[i++ % this->key_size] << 24;
+                encrypted_hash |= e_key[i++ % this->key_size];
+                encrypted_hash |= e_key[i++ % this->key_size] << 8;
+                encrypted_hash |= e_key[i++ % this->key_size] << 16;
+                encrypted_hash |= e_key[i++ % this->key_size] << 24;
                 encrypted_hash = encrypted_hash ^ hash;
             }
 
@@ -187,7 +186,7 @@ public:
         CodecBuffer *empty_bf, *lz_bf, *hf_bf;
 
         // init compression
-        if (!init()) return false;
+        init();
         lz_cdc->initStream(&cdc_strm);
         hf_cdc->initStream(&cdc_strm);
 
@@ -244,7 +243,7 @@ public:
         CodecBuffer *empty_bf, *raw_bf;
 
         // init
-        if (!init()) return false;
+        init();
         hf_cdc->initStream(&cdc_strm);
         lz_cdc->initStream(&cdc_strm);
 
@@ -308,14 +307,16 @@ private:
         ifile.read((char*)&ah, sizeof(ah));
         if (ifile.gcount() !=  sizeof(ah)) return false;
         if (memcmp(ah.a_sig, sig, sizeof(sig)) == 0 && ah.a_sig2 == sig2) {
-            *a_fcnt = ah.a_fcnt;
-            *a_flgs = ah.a_flgs;
-            *a_unc_size = ah.a_unc_size;
-            *a_cmp_size = ah.a_cmp_size;
+            if (a_fcnt) *a_fcnt = ah.a_fcnt;
+            if (a_flgs) *a_flgs = ah.a_flgs;
+            if (a_unc_size) *a_unc_size = ah.a_unc_size;
+            if (a_cmp_size) *a_cmp_size = ah.a_cmp_size;
             return true;
         } else {
-            *a_fcnt     = *a_flgs     = 0;
-            *a_unc_size = *a_cmp_size = 0;
+            if (a_fcnt) *a_fcnt         = 0;
+            if (a_flgs) *a_flgs         = 0;
+            if (a_unc_size) *a_unc_size = 0;
+            if (a_cmp_size) *a_cmp_size = 0;
             return false;
         }
     }
@@ -355,7 +356,7 @@ public:
             fh.f_cmp_size = compressFile(ifile, arch);
             fh.f_cnt_hsh = f_hash;
 
-            cout << endl;
+            consoleEndLine();
  
             // rewrite header
             e_pos = int(arch.tellp());
@@ -377,10 +378,7 @@ public:
         path dir(dir_name);
 
         // ask for password
-        setConsoleTextNormal();
-        cout << S_PASS1 << endl << endl << " ";
-        getline(cin, ekey, '\n');
-        cout << endl;
+        consoleAskPassword1(e_key);
         
         // open archive
         arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
@@ -389,9 +387,9 @@ public:
         b_pos = int(arch.tellp());
 
         // write header
-        if (!ekey.empty()) f_flgs |= AF_ENCRYPT;
+        if (!e_key.empty()) f_flgs |= AF_ENCRYPT;
         writeHeader(arch, f_cnt, f_flgs, 0, 0);
-        initEncryption(!ekey.empty(), nullptr, &arch);
+        initEncryption(!e_key.empty(), nullptr, &arch);
         
         // directory
         if (is_directory(dir)) {
@@ -436,37 +434,30 @@ public:
     // archive extracting with option to only list files stored in archive
     bool archiveExtract(string &arch_name, string &dir, bool list) {
         QWord a_unc_size(0), a_cmp_size(0);
-        DWord f_cnt(0), f_flags(0);
+        DWord a_cnt(0), a_flags(0);
         ifstream arch;
-
-        setConsoleTextNormal();
+        ofstream flist;
 
         // read header
         arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
-        if (!readHeader(arch, &f_cnt, &f_flags, &a_unc_size, &a_cmp_size)) return false;
+        if (!readHeader(arch, &a_cnt, &a_flags, &a_unc_size, &a_cmp_size)) return false;
 
         // ask for password if archive is encrypted
-        if (f_flags & AF_ENCRYPT) {
-            cout << S_PASS2 << endl << endl << " ";
-            getline(cin, ekey, '\n');
-            cout << endl;
-        }
+        if (a_flags & AF_ENCRYPT) consoleAskPassword2(e_key);
+        else setConsoleTextNormal();
 
-        initEncryption(f_flags & AF_ENCRYPT, &arch, nullptr);
+        initEncryption(a_flags & AF_ENCRYPT, &arch, nullptr);
 
         // create text file if we want to only list files
-        ofstream flist;
         if (list) {
             flist.open(dir);
 
             // and write header
-            flist << S_LST_AR << path(arch_name).filename() << endl;
-            flist << S_LST_FC << f_cnt << endl;
-            flist << S_LST_US << a_unc_size/1024 << " kB" << endl << endl;
-            flist << S_LST_HD << endl;
+            fileListWriteHeader(flist, a_cnt, a_unc_size,
+                (char*)(path(arch_name).filename().c_str()));
         }
 
-        for (int i = 0; i < int(f_cnt); i++) {
+        for (int i = 0; i < int(a_cnt); i++) {
             // read file header
             FileHeader fh;
             string f_name;
@@ -475,28 +466,14 @@ public:
             // read file name from archive
             for (int j = 0; j < int(fh.f_nm_cnt); j++) f_name += (char)arch.get();
 
-            // if we want to list only files...
+            // only list files 
             if (list) {
-                // directory
-                if (fh.f_flags & FF_DIR)
-                {
-                    for (int w = 0; w < 39; w++) flist << ' ';
-                    flist << f_name << endl;
-                }
-                // file
-                else {
-                    std::stringstream sh;
-                    sh << uppercase << hex << setfill('0') << setw(8) << fh.f_cnt_hsh;
-                    flist << setw(10) << sh.str() << " "
-                        << setw(15) <<  fh.f_cmp_size / 1024 << " kB "
-                        << setw(15) <<  fh.f_dcm_size / 1024 << " kB ";
-                    flist << f_name << endl;
-                }
+                fileListWriteFile(flist, f_name.c_str(), &fh);
 
                 // go to next file in archive
                 arch.seekg(fh.f_cmp_size, ios::cur);
 
-            // extracting archive
+            // extract archive
             } else {
 
                 // create output directory
@@ -510,9 +487,9 @@ public:
                     else create_directories(p.parent_path());
                 } else {
                     path base(f_name), pxt = p.extension();
-                    base.replace_extension("");
+                    base.replace_extension(S_EMPTY);
                     while (exists(p)) {
-                        p = base.concat("0");
+                        p = base.concat(S_ZERO);
                         p.replace_extension(pxt);
                     }
                 }
@@ -537,10 +514,12 @@ public:
                     }
 
                     // check if hash from archive is the same as counted one
-                    if (f_hash != fh.f_cnt_hsh)
-                        cout << endl << S_ERR_HASH << endl;
+                    if (f_hash != fh.f_cnt_hsh) {
+                        consoleEndLine();
+                        consoleWriteEndLine(S_ERR_HASH);
+                    }
 
-                    cout << endl;
+                    consoleEndLine();
                     if (ofile.is_open()) ofile.close();
                 }
 
@@ -558,10 +537,10 @@ public:
     // create output filename based on input
     void createUniqueName(string &name, string *out, char const *next) {
         path pn(name), base(name);
-        base.replace_extension("");
+        base.replace_extension(S_EMPTY);
         pn.replace_extension(next);
         while (exists(pn)) {
-            pn = base.concat("0");
+            pn = base.concat(S_ZERO);
             pn.replace_extension(next);
         }
         *out = pn.string();
@@ -570,73 +549,57 @@ public:
     // detect if input is a file, folder or archive 
     void detectInput(string &&name, bool list) {
         string oname;
-        bool act_cmp = true;
+        bool cmp(true);
 
         setConsoleTextRed();
 
         if (is_directory(name)) {
             // input is directory to compress
-            createUniqueName(name, &oname, ext);
-            cout << S_COMP << path(name).filename() << " -> "
-                 << path(oname).filename() << endl << endl;
+            createUniqueName(name, &oname, S_LZEXT);
+            consoleCompWrite((const char*)(path(name).filename().string().c_str()),
+                (const char*)(path(oname).filename().string().c_str()));
             archiveCreate(name, oname);
-        } else if(is_regular_file(name)) {
-            QWord nul;
-
+        }
+        else if (is_regular_file(name)) {
             // try to read header
             ifstream ifile(name, ios::binary);
             bool is_arch = ifile.is_open();
             if (is_arch)
-                is_arch = readHeader(ifile, (DWord*)&nul, (DWord*)&nul, &nul, &nul);
+                is_arch = readHeader(ifile, nullptr, nullptr, nullptr, nullptr);
+            ifile.close();
             if (is_arch) {
-
                 // input is archove
-                ifile.close();
-                act_cmp = false;
-
+                cmp = false;
                 // create file name for file list or for output folder
-                if (!list) createUniqueName(name, &oname, "");
-                else createUniqueName(name, &oname, "txt");
-                cout << S_DECOMP << path(name).filename() << " -> "
-                     << path(oname).filename() << endl << endl;
+                if (!list) createUniqueName(name, &oname, S_EMPTY);
+                else       createUniqueName(name, &oname, S_LSTEXT);
+                if (!list) {
+                    consoleDecompWrite((const char*)(path(name).filename().string().c_str()),
+                        (const char*)(path(oname).filename().string().c_str()));
+                } else {
+                    consoleListWrite((const char*)(path(name).filename().string().c_str()),
+                        (const char*)(path(oname).filename().string().c_str()));
+                }
                 archiveExtract(name, oname, list);
-            } else {
-
+            }
+            else {
                 // input is  file to compress
-                ifile.close();
-                createUniqueName(name, &oname, ext);
-                cout << S_COMP << path(name).filename() << " -> "
-                     << path(oname).filename() << endl << endl;
+                createUniqueName(name, &oname, S_LZEXT);
+                consoleCompWrite((const char*)(path(name).filename().string().c_str()),
+                    (const char*)(path(oname).filename().string().c_str()));
                 archiveCreate(name, oname);
             }
-        } else {
+        }
+        else {
             return;
         }
 
-        setConsoleTextRed();
-
         // print  summary
-        clock_t c_time = clock();
-        double sec = double(c_time - c_begin) / CLOCKS_PER_SEC;
-        int w1(9), w2(9), w3(4);
-
-        // compression summary with ratio
-        if (act_cmp) {
-            w1 = 6; w2 = 6; w3 = 5;
-            cout << endl << " Ratio: "
-                << setw(10) << (float)total_output / (float)total_input * 100.0 << "% |";
-
-        // decompression
-        } else {
-            cout << endl;
-            for (int k = 0; k < 15; k++) cout << " ";
+        setConsoleTextRed();
+        if (!list) {
+            consoleSummaryWrite(total_input, total_output,
+                float(clock() - c_begin) / CLOCKS_PER_SEC, cmp);
         }
-
-        // input output sizes
-        cout << " Size: " << setw(w1) << (total_input / 1024) << "kB -> "
-             << setw(w2) << (total_output / 1024) << "kB | Time: "
-             << setw(w3) << sec << "s "
-             << endl << endl << " ";
         consoleWait();
     }
 };
@@ -648,22 +611,9 @@ private:
 public:
     void init() { c_begin = clock(); }
     bool compressCallback(int in_size, int out_size, int stream_size, const char *f_name) {
-        string fn;
-        if (f_name == nullptr) fn = "";
-        else {
-            fn = f_name;
-            fn.resize(28, ' ');
-        }
-        clock_t c_time = clock();
-        double sec = double(c_time - c_begin) / CLOCKS_PER_SEC;
-        int pr = ((int)((in_size / (float)stream_size) * 100));
+        int pr         = ((int)((in_size / (float)stream_size) * 100));
         if (pr < 0) pr = 100;
-        cout << "\r" 
-             << setw(5) << pr  << "% | "
-             << setw(9) << sec << "s | "
-             << setw(9) << (in_size)   / 1024 << "kB -> "
-             << setw(9) << (out_size)  / 1024 << "kB | "
-             << fn;
+        consolePrintProgress(f_name, pr, float(clock() - c_begin) / CLOCKS_PER_SEC, in_size, out_size);
         return true;
     }
     bool decompressCallback(int in_size, int out_size, int stream_size, const char *f_name) {
@@ -678,9 +628,9 @@ public:
         // set console title + write program info
         setConsoleTitle(S_TITLE);
         setConsoleTextRed();
-        cout << S_INF1 << endl;
+        consoleWriteEndLine(S_INF1);
         setConsoleTextNormal();
-        cout << S_INF2 << endl;
+        consoleWriteEndLine(S_INF2);
 
         // app takes only 1 argument
         if (argc > 1) {
@@ -695,14 +645,14 @@ public:
             lzhx.setCodec   (&lz);
             lzhx.setCallback(&callback);
             bool list = false;
-            if (argc > 2) list = (bool)(argv[2][1] == 'l' || argv[2][1] == 'L');
+            if (argc > 2) list = (bool)(argv[2][0] == S_LISTC1 || argv[2][0] == S_LISTC2);
             lzhx.detectInput(string(argv[1]), list);
         } else {
             // print usage info
             setConsoleTextRed();
-            cout << S_USAGE1 << endl;
+            consoleWriteEndLine(S_USAGE1);
             setConsoleTextNormal();
-            cout << S_USAGE2 << endl;
+            consoleWriteEndLine(S_USAGE2);
             consoleWait();
         }
         return 0;
@@ -714,9 +664,15 @@ public:
 int main(int argc, char const *argv[]) {
     LZHX::ConsoleApplication app;
     try { return app.run(argc, argv);
-    } catch (string &msg)  { cout << msg << endl;
-    } catch (exception &e) { cout << LZHX::S_ERR_EX   << e.what() << endl;
-    } catch (...) {          cout << LZHX::S_ERR_UNEX << endl; }
+    } catch (string &msg)  { 
+        LZHX::consoleWriteEndLine( msg.c_str() );
+    }
+    catch (exception &e) {
+        LZHX::consoleWriteEndLine(LZHX::S_ERR_EX); 
+        LZHX::consoleWriteEndLine(e.what());
+    } catch (...) {
+        LZHX::consoleWriteEndLine( LZHX::S_ERR_UNEX );
+    }
     LZHX::consoleWait();
     return 1;
 }

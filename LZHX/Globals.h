@@ -7,6 +7,7 @@
 #ifndef LZHX_GLOBALS_H
 #define LZHX_GLOBALS_H
 
+// LZHX
 #include "Types.h"
 
 namespace LZHX {
@@ -34,18 +35,25 @@ char const S_PASS1 []   = " Type password if you want to encrypt this archive or
 char const S_PASS2 []   = " Archive is encrypted. Type password:";
 char const S_COMP  []   = " Compress   : ";
 char const S_DECOMP[]   = " Decompress : ";
+char const S_LIST[]     = " Listing    : ";
 char const S_LST_AR[]   = "Archive                   : ";
 char const S_LST_FC[]   = "Files/folders in archive  : ";
 char const S_LST_US[]   = "Uncompressed archive size : ";
 char const S_LST_HD[]   = "  FNV Hash        Compressed       Uncompressed  Name";
 char const S_CLOSE []   = " Press anything to close program...";
+char const S_LSTEXT[]   = "txt";
+char const S_LZEXT[]    = "lzhx";
+char const S_ZERO []    = "0";
+char const S_EMPTY[]    = "";
+char const S_LISTC1     = 'l';
+char const S_LISTC2     = 'L';
 
 // archive signature
 Byte  const sig[4] = { 'L','Z','H','X' };
 DWord const sig2   = 0xFFFFFFFB;
 
 // archive extension
-char  const ext[5] = "lzhx";
+
 
 };
 
