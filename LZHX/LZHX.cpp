@@ -27,7 +27,6 @@
 #include "Huffman.h"
 #include "LZ.h"
 
-
 // namespaces
 using namespace std;
 using namespace std::experimental::filesystem::v1;
@@ -51,7 +50,6 @@ private:
     
     // init archiving
     void init() {
-        c_begin = clock();
         cdc_strm.buf_count = sttgs->byte_bffr_cnt;
         cdc_strm.buf_stack = cdc_bffrs;
         for (int i = 0; i < int(sttgs->byte_bffr_cnt); i++) {
@@ -377,6 +375,8 @@ public:
         ofstream arch;
         path dir(dir_name);
 
+        c_begin = clock();
+
         // ask for password
         consoleAskPassword1(e_key);
         
@@ -437,6 +437,8 @@ public:
         DWord a_cnt(0), a_flags(0);
         ifstream arch;
         ofstream flist;
+
+        c_begin = clock();
 
         // read header
         arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
@@ -597,8 +599,9 @@ public:
         // print  summary
         setConsoleTextRed();
         if (!list) {
+            clock_t c_end = clock();
             consoleSummaryWrite(total_input, total_output,
-                float(clock() - c_begin) / CLOCKS_PER_SEC, cmp);
+                float(c_end - c_begin) / CLOCKS_PER_SEC, cmp);
         }
         consoleWait();
     }

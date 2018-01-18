@@ -16,16 +16,18 @@ namespace LZHX {
 char const S_TITLE[] =    "LZHX File Archiver";
 char const S_INF1 [] =    "\n LZHX\n";
 char const S_INF2 [] =    " Info       : File archiver based on Lempel-Ziv and Huffman algorithms.\n"
-                          "              To check the integrity  of  files, the program uses a FNV\n"
-                          "              hashing algorithm and for encryption modified XOR cipher.\n\n"
                           " Author     : mariusz.ziach@gmail.com\n"
+                          " Website    : http://ziach.pl/\n"
                           " Date       : 2018\n"
                           " Version    : 1.0\n";
-char const S_USAGE1[] =   " Usage: LZHX.exe <file/folder/archive to compress/decompress>\n";
+char const S_USAGE1[] =   " Usage: LZHX.exe <file/folder/archive to compress/decompress> [l]\n";
 char const S_USAGE2[] =   "  The program will automatically recognize whether the given parameter\n"
                           "  is an archive  for  decompression or a file/folder  for  compression.\n"
                           "  It  will also prevent overwriting files by creating unique names for\n"
-                          "  outputed files and folders if needed.\n ";
+                          "  outputed files and folders if needed.\n\n"
+                          "  l - if the first parameter is an archive and you use this option, the\n"
+                          "      archive will not be unpacked but only a text file with a file list\n"
+                          "      will be created.\n";
 char const S_ERR_FOPN[] = " File error.\n";
 char const S_ERR_EX  [] = " Exception: ";
 char const S_ERR_UNEX[] = " Unknown exception.\n";
