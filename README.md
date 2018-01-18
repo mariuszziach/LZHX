@@ -1,5 +1,7 @@
 # LZHX
 
+### About
+
 LZHX is a very easy to use file archiver based on Lempel-Ziv and Huffman algorithms. To check integrity of files, program uses a FNV hashing algorithm and for encryption modified XOR cipher.
 
 ![LZHX](http://ziach.pl/LZHX.png)
@@ -10,4 +12,8 @@ Program will automatically recognize whether the given parameter is an archive f
 
 LZHX is able to compress and encrypt 1.36 GB folder (mostly with text files) into 469 MB archive in 4 minutes 25 seconds. Decompression and decryption of the same archive took 3 minutes 15 seconds. Compression ratio is usually worse than in for example ZIP archives but LZHX is often faster and is able encrypt archive.
 
+### Usage
+
 ![LZHX](http://ziach.pl/gif.gif)
+
+[ziachpl](http://ziach.pl/)
