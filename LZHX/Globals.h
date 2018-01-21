@@ -45,7 +45,6 @@ char const S_LST_HD[]   = "  FNV Hash        Compressed       Uncompressed  Name
 char const S_CLOSE []   = " Press anything to close program...";
 char const S_LSTEXT[]   = "txt";
 char const S_LZEXT[]    = "lzhx";
-char const S_ZERO []    = "0";
 char const S_EMPTY[]    = "";
 char const S_LISTC1     = 'l';
 char const S_LISTC2     = 'L';
