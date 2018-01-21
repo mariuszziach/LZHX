@@ -14,7 +14,7 @@ LZHX is able to compress and encrypt 1,36 GB folder (mostly with text files) int
 
 ### Usage
 
-![LZHX](http://ziach.pl/gif.gif)
+![LZHX](http://ziach.pl/gif2.gif)
 
 ### Author
 
