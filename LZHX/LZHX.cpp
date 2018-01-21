@@ -461,7 +461,7 @@ public:
 
             // and write header
             fileListWriteHeader(flist, a_cnt, a_unc_size,
-                (char*)(path(arch_name).filename().c_str()));
+                (char*)(path(arch_name).filename().string().c_str()));
         }
 
         for (int i = 0; i < int(a_cnt); i++) {
