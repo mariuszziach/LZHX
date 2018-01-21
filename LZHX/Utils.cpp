@@ -149,9 +149,7 @@ void LZHX::fileListWriteHeader(ofstream &ofs, DWord a_cnt,
 }
 void LZHX::fileListWriteFile(ofstream &ofs, const char *f_name,
                              LZHX::FileHeader *fh) {
-    if (fh->f_flags & FF_DIR)
-    {
-        for (int w = 0; w < 39; w++) ofs << ' ';
+    if (fh->f_flags & FF_DIR) {
         ofs << f_name << endl;
     } else {
         std::stringstream sh;
