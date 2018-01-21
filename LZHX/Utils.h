@@ -58,6 +58,8 @@ bool setFileAttributes (char const *f_name, DWord attr);
 void getFileTime(char const *f_name, QWord *fcr, QWord *fla, QWord *lwr, bool dir = false);
 void setFileTime(char const *f_name, QWord  fcr, QWord  fla, QWord  lwr, bool dir = false);
 
+// suffix gen
+std::string suffixGen(int &i);
 
 } // namespace
 

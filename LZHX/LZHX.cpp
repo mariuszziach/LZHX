@@ -35,14 +35,13 @@ namespace LZHX {
 
 class LZHX {
 private:
-    string curr_f_name;
-    clock_t c_begin;
-    QWord total_input;
-    QWord total_output;
-    CodecBuffer *cdc_bffrs;
-    CodecStream  cdc_strm;
-    CodecInterface *lz_cdc, *hf_cdc;
-    CodecSettings *sttgs;
+    string                  curr_f_name;
+    clock_t                 c_begin;
+    QWord                   total_input, total_output;
+    CodecBuffer            *cdc_bffrs;
+    CodecStream             cdc_strm;
+    CodecInterface         *lz_cdc, *hf_cdc;
+    CodecSettings          *sttgs;
     CodecCallbackInterface *cdc_cllbck;
 
     // function for counting working buffer size
@@ -109,26 +108,26 @@ public:
         updateHash (buf, size); ofile.write(buf, size);  }
 
 private:
-    int key_pos, key_size;
-    bool do_encrypt;
-    DWord encrypted_hash;
+    int    key_pos, key_size;
+    bool   do_encrypt;
+    DWord  encrypted_hash;
     string e_key;
 
     // encryption functions 
     Byte encryptByte(Byte b) {
         char c = e_key[key_pos++ % key_size];
-        return b ^ c ^ (key_pos * 3) ^ (c * 5);
+        return Byte(b ^ c ^ (key_pos * 3) ^ (c * 5));
     }
     Byte decryptByte(Byte b) {
         return encryptByte(b);
     }
 public:
     // init encryption
-    void initEncryption(bool do_encrypt, ifstream *arch, ofstream *arch2) {
-        this->do_encrypt = do_encrypt;
+    void initEncryption(bool de, ifstream *arch, ofstream *arch2) {
+        this->do_encrypt = de;
         this->key_pos    = 0;
         this->key_size   = int(e_key.length());
-        if (do_encrypt) {
+        if (this->do_encrypt) {
 
             // encrypt hashed password
             DWord hash = 0x811C9DC5;
@@ -219,7 +218,7 @@ public:
             }
 
             // callback
-            if (cdc_cllbck != nullptr && !(cc++ % 12))
+            if (cdc_cllbck != nullptr && !(cc++ % 10))
                 cdc_cllbck->compressCallback(lz_cdc->getTotalIn(), hf_cdc->getTotalOut(),
                     cdc_strm.stream_size, curr_f_name.c_str());
         }
@@ -248,7 +247,7 @@ public:
         while (tot_in < cdc_strm.stream_size) {
 
             // read 4 blocks
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < ILZSN; i++) {
                 empty_bf = cdc_strm.find(CBT_EMPTY);
 
                 // read and decrypt block
@@ -271,7 +270,7 @@ public:
             raw_bf->type = CBT_EMPTY;
 
             // callback
-            if (cdc_cllbck != nullptr && !(cc++ % 12))
+            if (cdc_cllbck != nullptr && !(cc++ % 10))
                 cdc_cllbck->decompressCallback(hf_cdc->getTotalIn(),
                     lz_cdc->getTotalOut(), cdc_strm.stream_size, curr_f_name.c_str());
         }
@@ -320,7 +319,6 @@ private:
     }
 
 public:
-
     // add single file/folder to archive
     bool archiveAddFile(ofstream &arch, string &f, bool dir = false) {
         int h_pos, e_pos;
@@ -375,11 +373,11 @@ public:
         ofstream arch;
         path dir(dir_name);
 
-        c_begin = clock();
-
         // ask for password
         consoleAskPassword1(e_key);
-        
+
+        c_begin = clock();
+
         // open archive
         arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
     
@@ -397,7 +395,7 @@ public:
 
             // add every file and folder in directory
             for (auto& itm : recursive_directory_iterator(dir)) {
-                string &f = ((string&)((path&)itm).string());
+                string f = ((string)((path)itm).string());
 
                 // file
                 if (is_regular_file(f)) {
@@ -412,11 +410,18 @@ public:
                 }
             }
 
+            if (f_cnt == 0) {
+                string f(dir.string());
+                if (!archiveAddFile(arch, f, true))
+                    return false;
+                f_cnt++;
+            }
+
         // file
         } else if(is_regular_file(dir)) {
 
             // just add one file to archive
-            string &f = (string&)dir.filename().string();
+            string f = (string)(dir.filename().string());
             if (!archiveAddFile(arch, f))
                 return false;
             f_cnt = 1;
@@ -438,8 +443,6 @@ public:
         ifstream arch;
         ofstream flist;
 
-        c_begin = clock();
-
         // read header
         arch.open(arch_name, ios::binary); if (!arch.is_open()) return false;
         if (!readHeader(arch, &a_cnt, &a_flags, &a_unc_size, &a_cmp_size)) return false;
@@ -447,6 +450,8 @@ public:
         // ask for password if archive is encrypted
         if (a_flags & AF_ENCRYPT) consoleAskPassword2(e_key);
         else setConsoleTextNormal();
+
+        c_begin = clock();
 
         initEncryption(a_flags & AF_ENCRYPT, &arch, nullptr);
 
@@ -488,12 +493,14 @@ public:
                     if (fh.f_flags& FF_DIR) create_directories(p);
                     else create_directories(p.parent_path());
                 } else {
+                    int suf(0);
                     path base(f_name), pxt = p.extension();
                     base.replace_extension(S_EMPTY);
                     while (exists(p)) {
-                        p = base.concat(S_ZERO);
+                        p = string(string(base.string()) + suffixGen(suf));
                         p.replace_extension(pxt);
                     }
+                    if (fh.f_flags& FF_DIR) create_directories(p);
                 }
 
                 // extract file
@@ -538,11 +545,12 @@ public:
 
     // create output filename based on input
     void createUniqueName(string &name, string *out, char const *next) {
+        int suf(0);
         path pn(name), base(name);
         base.replace_extension(S_EMPTY);
         pn.replace_extension(next);
         while (exists(pn)) {
-            pn = base.concat(S_ZERO);
+            pn = string(string(base.string()) + suffixGen(suf));
             pn.replace_extension(next);
         }
         *out = pn.string();
@@ -583,16 +591,14 @@ public:
                         (const char*)(path(oname).filename().string().c_str()));
                 }
                 archiveExtract(name, oname, list);
-            }
-            else {
+            } else {
                 // input is  file to compress
                 createUniqueName(name, &oname, S_LZEXT);
                 consoleCompWrite((const char*)(path(name).filename().string().c_str()),
                     (const char*)(path(oname).filename().string().c_str()));
                 archiveCreate(name, oname);
             }
-        }
-        else {
+        }  else {
             return;
         }
 
@@ -638,7 +644,7 @@ public:
         // app takes only 1 argument
         if (argc > 1) {
             CodecSettings        sttgs;
-            sttgs.Set(16, 16, 2, 8, 16, 3, 3);
+            sttgs.Set(16, 16, 2, 8, 16, 3, 2);
             sttgs.byte_lkp_hsh = 5;
             LZHX                 lzhx(&sttgs);
             LZ                   lz  (&sttgs);

@@ -4,6 +4,10 @@
 // date  : 2018                        //
 /////////////////////////////////////////
 
+#include <iostream>
+#include <memory>
+#include <cstdlib>
+
 // LHZX
 #include "LZ.h"
 #include "Utils.h"
@@ -26,13 +30,13 @@ Byte *LZDictionaryBuffer::putByte(Byte val) {
     return &arr[pos++];
 }
 // convert position absolute to relative and conversely
-int LZDictionaryBuffer::convPos(bool abs_to_rel, int pos) {
+int LZDictionaryBuffer::convPos(bool abs_to_rel, int p) {
     if (abs_to_rel) {
-        if (this->pos >= pos) return  this->pos - pos;
-        else                  return (this->cap - pos) + this->pos;
+        if (this->pos >= p) return  this->pos - p;
+        else                return (this->cap - p) + this->pos;
     } else {
-        if (this->pos >= pos) return this->pos -  pos;
-        else                  return this->cap - (pos - this->pos);
+        if (this->pos >= p) return this->pos -  p;
+        else                return this->cap - (p - this->pos);
     }
 }
 Byte LZDictionaryBuffer::getByte(int p) { return arr[p]; }
@@ -63,23 +67,23 @@ LZMatchFinder::LZMatchFinder(CodecSettings *cdc_sttgs) {
     this->lz_buf     = nullptr;
     this->buf        = nullptr;
     this->buf_size   = 0;
-    this->hash_map   = new LZDictionaryNode[cdc_sttgs->byte_lkp_cap ];  
-    this->cyclic_buf = new LZDictionaryNode[cdc_sttgs->byte_mtch_pos];
+    this->lkp_tab    = new LZDictionaryNode[cdc_sttgs->byte_lkp_cap ];  
+    this->dict_tab   = new LZDictionaryNode[cdc_sttgs->byte_mtch_pos];
     this->best_match = new LZMatch; 
     this->cdc_sttgs  = cdc_sttgs;
-    this->cyclic_iterator = 0;
-    for (int i = 0; i < (int)cdc_sttgs->byte_lkp_cap;  i++) hash_map  [i].clear();
-    for (int i = 0; i < (int)cdc_sttgs->byte_mtch_pos; i++) cyclic_buf[i].clear();
+    this->dict_i = 0;
+    for (int i = 0; i < (int)cdc_sttgs->byte_lkp_cap;  i++) lkp_tab  [i].clear();
+    for (int i = 0; i < (int)cdc_sttgs->byte_mtch_pos; i++) dict_tab[i].clear();
 }
 LZMatchFinder::~LZMatchFinder() {
-    delete[] this->hash_map;
-    delete[] this->cyclic_buf;
+    delete[] this->lkp_tab;
+    delete[] this->dict_tab;
     delete this->best_match;
 }
-void LZMatchFinder::assignBuffer(Byte *buf, int buf_size, LZDictionaryBuffer *lz_buf) {
-    this->buf = buf;
-    this->buf_size = buf_size;
-    this->lz_buf = lz_buf;
+void LZMatchFinder::assignBuffer(Byte *b, int bs, LZDictionaryBuffer *lzb) {
+    this->buf      = b;
+    this->buf_size = bs;
+    this->lz_buf   = lzb;
 }
 
 // FNV hash
@@ -95,10 +99,10 @@ int LZMatchFinder::hash(Byte *in) {
 // insert new item into dictionary
 void LZMatchFinder::insert(int pos) {
     if (buf_size - pos  <= int(cdc_sttgs->byte_lkp_hsh )) return;
-    if (cyclic_iterator >= int(cdc_sttgs->byte_mtch_pos))
-        cyclic_iterator = 0;
-    LZDictionaryNode *current = hash_map   + hash(buf + pos);
-    LZDictionaryNode *empty   = cyclic_buf + cyclic_iterator++;
+    if (dict_i >= int(cdc_sttgs->byte_mtch_pos))
+        dict_i = 0;
+    LZDictionaryNode *current = lkp_tab   + hash(buf + pos);
+    LZDictionaryNode *empty   = dict_tab + dict_i++;
     empty->clear();
     empty->pos     = current->pos;
     empty->next    = current->next;
@@ -117,7 +121,7 @@ LZMatch *LZMatchFinder::find(int pos) {
     LZDictionaryNode *current;
     best_match->clear();
     if (buf_size - pos <= (int)(cdc_sttgs->byte_lkp_hsh) || pos == 0) return best_match;
-    current = hash_map + hash(buf + pos);
+    current = lkp_tab + hash(buf + pos);
     runs    = 0;
     while (current && (runs++ < int(cdc_sttgs->byte_runs))) {
         if (current->valid) {
@@ -144,6 +148,7 @@ LZ::LZ(CodecSettings *cdc_sttgs) {
     lz_buf     = new LZDictionaryBuffer(cdc_sttgs->byte_mtch_pos);
     tmp_btebf  = new Byte[cdc_sttgs->byte_mtch_len];
     lz_match   = nullptr;
+    rolz_match = nullptr;
     this->cdc_sttgs = cdc_sttgs;
 }
 LZ::~LZ() {
@@ -159,8 +164,8 @@ int LZ::getTotalIn()  { return total_in;  }
 int LZ::getTotalOut() { return total_out; }
 
 // init
-void LZ::initStream(CodecStream *codec_stream) {
-    this->codec_stream = codec_stream;
+void LZ::initStream(CodecStream *cs) {
+    this->codec_stream = cs;
     this->total_in     = 0;
     this->total_out    = 0;
 }
@@ -168,8 +173,8 @@ void LZ::initStream(CodecStream *codec_stream) {
 // compress block
 int LZ::compressBlock() {
     int o[4], in_size(0), out_size(0), i(0);
-    CodecBuffer *cb_in, *cb_out[4];
-    Byte *in, *out[4];
+    CodecBuffer *cb_in, *cb_out[ILZSN];
+    Byte *in, *out[ILZSN];
    
     // find raw buffer to compress
     cb_in = codec_stream->find(CBT_RAW);
@@ -177,14 +182,14 @@ int LZ::compressBlock() {
 
     // find 4 empty buffers for output
     // 0 -> instructions; 1 -> pos; 2 -> len; 3 ->literal;
-    for (int i = 0; i < 4; i++) {
-        o[i]            = 0;
-        cb_out[i]       = codec_stream->find(CBT_EMPTY); 
-        cb_out[i]->type = CBT_LZ;
-        out[i]          = cb_out[i]->mem;
+    for (int j = 0; j < ILZSN; j++) {
+        o     [j]       = 0;
+        cb_out[j]       = codec_stream->find(CBT_EMPTY); 
+        cb_out[j]->type = CBT_LZ;
+        out   [j]       = cb_out[j]->mem;
 
         // first byte of buffer is buffer type
-        out[i][o[i]++]  = i;
+        out[j][o[j]++]  = Byte(j);
     }
 
     // input stream after compression will be empty
@@ -193,35 +198,47 @@ int LZ::compressBlock() {
 
     // assign buffer to match finder, write input size int 1 stream
     lz_mf->assignBuffer(in, in_size, lz_buf);
-    o[1] += write32To8Buf(out[1] + o[1], in_size);
+    o[ILZMPS] += write32To8Buf(out[ILZMPS] + o[ILZMPS], in_size);
+   
+    match_empty.clear();
+    lz_match = &match_empty;
 
     while (i < in_size) {
 
         // search for best match
-        if (i + int(cdc_sttgs->byte_lkp_hsh) > in_size) lz_match->len = 0;
-        else lz_match = lz_mf->find(i);
+        if (i + int(cdc_sttgs->byte_lkp_hsh) > in_size) {
+            lz_match->len   = 0;
+        } else {
+            lz_match   = lz_mf->find(i);
+        }
 
-
-        if ((lz_match->len > 3) &&
+        if ((lz_match->len > ILZMINML) &&
             (lz_match->len + lz_match->pos + int(cdc_sttgs->byte_lkp_hsh)) < in_size) {
 
             // write match to stream
             lz_match->pos = lz_buf->convPos(true, lz_match->pos);
-            out[0][o[0]++] = (Byte)(1);
-            out[2][o[2]++] = (Byte)(lz_match->len);
-            o[1]          += write16To8Buf(out[1] + o[1], lz_match->pos);
-
+            if (lz_match->pos < 256) {
+                out[ILZIS] [o[ILZIS] ++] = (Byte)(ILZIM1);
+                out[ILZMLS][o[ILZMLS]++] = (Byte)(lz_match->len);
+                out[ILZMPS][o[ILZMPS]++] = (Byte)(lz_match->pos);
+            } else {
+                out[ILZIS] [o[ILZIS] ++] = (Byte)(ILZIM2);
+                out[ILZMLS][o[ILZMLS]++] = (Byte)(lz_match->len);
+                o[ILZMPS] += write16To8Buf(out[ILZMPS] + o[ILZMPS], Word(lz_match->pos));
+            }
             // add skipped bytes into dictionary
             while (lz_match->len--) {
                 lz_mf->insert(i);
                 lz_buf->putByte(in[i++]);
             }
-        }
-        else {
-            // write literal
-            out[0][o[0]++] = (Byte)(0);
-            out[3][o[3]++] = (Byte)(in[i]);
-
+        } else {
+            if (in[i] != ILZIM1 && in[i] != ILZIM2 && in[i] != ILZIL) {
+                out[ILZIS][o[ILZIS]++] = in[i];
+            } else {
+                // write literal
+                out[ILZIS][o[ILZIS]++] = (Byte)(ILZIL);
+                out[ILZLS][o[ILZLS]++] = (Byte)(in[i]);
+            }
             // add byte into dictionary
             lz_mf->insert(i);
             lz_buf->putByte(in[i++]);
@@ -229,9 +246,9 @@ int LZ::compressBlock() {
     }
 
     // set output buffer sizes
-    for (int i = 0; i < 4; i++) {
-        out_size       += o[i];
-        cb_out[i]->size = o[i];
+    for (int j = 0; j < ILZSN; j++) {
+        out_size       += o[j];
+        cb_out[j]->size = o[j];
     }
 
     // update processed bytes length
@@ -242,16 +259,16 @@ int LZ::compressBlock() {
 
 // decompress block
 int LZ::decompressBlock() {
-    int i[4], dec_size(0);
-    CodecBuffer *cb_out, *cb_in[4];
-    Byte *out, *temp_in[4], *in[4];
+    int i[ILZSN], dec_size(0);
+    CodecBuffer *cb_out, *cb_in[ILZSN];
+    Byte *out, *temp_in[ILZSN], *in[ILZSN];
 
     // find empty buffer for output
     cb_out = codec_stream->find(CBT_EMPTY);
     out = cb_out->mem;
 
     // find 4 lz input buffers
-    for (int j = 0; j < 4; j++) {
+    for (int j = 0; j < ILZSN; j++) {
         cb_in  [j]       = codec_stream->find(CBT_LZ);
         cb_in  [j]->type = CBT_EMPTY;
         temp_in[j]       = cb_in[j]->mem;
@@ -264,25 +281,31 @@ int LZ::decompressBlock() {
 
     // sort buffers by their function
     // 0 -> instructions; 1 -> pos; 2 -> len; 3 ->literal;
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++) 
-            if (temp_in[i][0] == j)
-                in[j] = temp_in[i];
+    for (int k = 0; k < ILZSN; k++)
+        for (int j = 0; j < ILZSN; j++)
+            if (temp_in[k][0] == j)
+                in[j] = temp_in[k];
 
     // read uncompressed size
-    dec_size = read32From8Buf(in[1] + i[1]);
-    i[1] += sizeof(DWord);
+    dec_size = read32From8Buf(in[ILZMPS] + i[ILZMPS]);
+    i[ILZMPS] += sizeof(DWord);
 
     for (int o = 0; o < dec_size; ) {
+        Byte c = in[ILZIS][i[ILZIS]++];
 
         // what to do?
-        if (in[0][i[0]++]) {
-            int pos, len;
-
+        if (c == ILZIM1 || c == ILZIM2) {
+            int pos(0), len(0);
+            
             // read match
-            pos = read16From8Buf(in[1] + i[1]); i[1] += sizeof(Word);
+            if (c == ILZIM2) {
+                pos = read16From8Buf(in[ILZMPS] + i[ILZMPS]);
+                i[ILZMPS] += sizeof(Word);
+            } else if (c == ILZIM1) {
+                pos = in[ILZMPS][i[ILZMPS]++];
+            }
             pos = lz_buf->convPos(false, pos);
-            len = in[2][i[2]++];
+            len = in[ILZMLS][i[ILZMLS]++];
 
             // copy match
             for (int j = 0; j < len; j++) {
@@ -294,16 +317,21 @@ int LZ::decompressBlock() {
             // insert processed bytes into dictionary
             for (int j = 0; j < len; j++)  lz_buf->putByte(tmp_btebf[j]);
             
-        }
-        else {
+        } else if (c == ILZIL) {
             // read uncompressed byte
-            lz_buf->putByte(in[3][i[3]]);
-            out[o++] = in[3][i[3]++];
+            lz_buf->putByte(in[ILZLS][i[ILZLS]]);
+            out[o++] = in[ILZLS][i[ILZLS]++];
+        } else {
+            lz_buf->putByte(c);
+            out[o++] = c;
         }
     }
 
     // update info
-    total_in    += i[0] + i[1] + i[2] + i[3];
+    for (int j = 0; j < ILZSN; j++) {
+        total_in += i[j];
+    }
+
     total_out   += dec_size;
     cb_out->size = dec_size;
     return dec_size;

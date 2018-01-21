@@ -144,9 +144,9 @@ int Huffman::getTotalIn()         { return total_in; }
 int Huffman::getTotalOut()        { return total_out; }
 
 // init
-void Huffman::initStream(CodecStream *codec_stream) {
-	this->codec_stream = codec_stream;
-	this->total_in = this->total_out = 0;
+void Huffman::initStream(CodecStream *cs) {
+	this->codec_stream = cs;
+	this->total_in     = this->total_out = 0;
 }
 
 // compress block
@@ -216,7 +216,7 @@ int Huffman::decompressBlock() {
 
     // decode each symbol
 	for (int o = 0; o < dec_size; o++)
-        out[o] = decodeSymbol(nodes);
+        out[o] = Byte(decodeSymbol(nodes));
 
     // update info
 	total_in    += cb_in->size;
