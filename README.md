@@ -10,7 +10,7 @@ Program will automatically recognize whether the given parameter is an archive f
 
 ### Compression time and ratio
 
-LZHX is able to compress and encrypt 1.36 GB folder (mostly with text files) into 469 MB archive in 4 minutes 25 seconds. Decompression and decryption of the same archive took 3 minutes 15 seconds. Compression ratio is usually worse than in for example ZIP archives but LZHX is often faster and is able encrypt archive.
+LZHX is able to compress and encrypt 1,36 GB folder (mostly with text files) into 469 MB archive in 4 minutes 25 seconds. Decompression and decryption of the same archive took 3 minutes 15 seconds. Compression ratio is usually worse than in for example ZIP archives but LZHX is often faster and is able encrypt archive.
 
 ### Usage
 
